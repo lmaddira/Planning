@@ -13,6 +13,11 @@
 #include "hashbase.h"
 #include "hashtable.h"
 
+
+#define NUMOFDIRS 8
+#define GETMAPINDEX(X, Y, XSIZE, YSIZE) ((Y-1)*XSIZE + (X-1))
+
+
 class Object{
     
 public:
@@ -149,6 +154,22 @@ public:
 //         return false;
 //     }
 // };     
+
+static const int weight =10;
+
+double heuristics(int goalposeX,int goalposeY, int X,int Y){
+    int deltaX = X-goalposeX;
+    int deltaY = Y-goalposeY;
+    //return std::max(std::abs(deltaX),std::abs(deltaY))+ 0.4*std::min(std::abs(deltaX),std::abs(deltaY));//
+    return sqrt(deltaX*deltaX + deltaY*deltaY);
+}
+
+
+double cal_f_val(int g_val,int h_val){
+    return g_val + (weight * h_val) ;
+}
+
+
 std::vector<std::pair<int,int>> do_Astar(
     double* map,
     int collision_thresh,
@@ -161,15 +182,15 @@ std::vector<std::pair<int,int>> do_Astar(
     int targetposeX,
     int targetposeY,
     int curr_time,
-    double* action_ptr
-    int start_index,end_index,mid_index;
+    int goalposeX,
+    int goalposeY
 ){
-
+    //int NUMOFDIRS = 8;
     int dX[NUMOFDIRS] = {-1, -1, -1,  0,  0,  1, 1, 1};
     int dY[NUMOFDIRS] = {-1,  0,  1, -1,  1, -1, 0, 1};
-    int goalposeX,goalposeY;
     HashTable <std::pair<int,int>,double> CLOSED_table;
     std::vector<Object> OPEN;
+    std::vector<std::pair<int,int>> action;
     double g_val =0;
     double h_val = heuristics(goalposeX,goalposeY, robotposeX,robotposeY);
     double f_val = cal_f_val(g_val,h_val);
@@ -177,15 +198,14 @@ std::vector<std::pair<int,int>> do_Astar(
     OPEN.push_back(Object(g_val,h_val,f_val,Make_Node(robotposeX,robotposeY)));
     std::make_heap(OPEN.begin(),OPEN.end(),myComparator());
     auto goal = Make_Node(goalposeX,goalposeY);
-    //std::vector<object2> CLOSED;
-
+    
 
     // compute the path 
     while (OPEN.size() != 0){
         std::push_heap(OPEN.begin(),OPEN.end(),myComparator());// maintaing the order of heap
         auto min_node = OPEN.front().Node; // returns the smallest Node by soring the f value
         auto min_g_val = OPEN.front().g;
-        std::cout<<"min node "<< min_node.first<<" "<<min_node.second<<"\n";
+        
          
         std::pop_heap(OPEN.begin(),OPEN.end(),myComparator());
         OPEN.pop_back(); // remove this node from OPEN
@@ -193,6 +213,7 @@ std::vector<std::pair<int,int>> do_Astar(
         if (min_node == goal){
             break;
         }
+        //std::cout<<"min node "<< min_node.first<<" "<<min_node.second<<"\n";
         //CLOSED.push_back(object2(min_g_val,min_node)); 
         CLOSED_table.Update(min_node,min_g_val); // inserting the smallest node and g_val to closed table as Hashtable - goal will not be pushed back into the Closed
 
@@ -202,46 +223,47 @@ std::vector<std::pair<int,int>> do_Astar(
             int newx = min_node.first + dX[dir];
             int newy = min_node.second + dY[dir];
 
-            if (newx >= 1 && newx <= x_size && newy >= 1 && newy <= y_size)
-            {
-                if (((int)map[GETMAPINDEX(newx,newy,x_size,y_size)] >= 0) && ((int)map[GETMAPINDEX(newx,newy,x_size,y_size)] < collision_thresh))  //if free
+            if(CLOSED_table.IsIncluded(Make_Node(newx,newy))== false){ // if not found in closed loop
+
+
+                if (newx >= 1 && newx <= x_size && newy >= 1 && newy <= y_size)
                 {
-                    //std::cout<<"checked that this node is availible...check if g_val current is greater than new g_val\n";
-                    //if (g_val > (min_g_val+ (int)map[GETMAPINDEX(newx,newy,x_size,y_size)])) { // checking if g(s') > g(s)+c(s,s')
-                            
-                    g_val = (min_g_val+ (int)map[GETMAPINDEX(newx,newy,x_size,y_size)]); // update g and f values in array
-                    h_val = heuristics(goalposeX,goalposeY,newx,newy);
-                    f_val = cal_f_val(g_val,h_val);
-                    //std::cout<<"f values at "<<newx<<" "<<newy<<" is "<<f[newx][newy]<<std::endl;
-                    //std::cout<<"updated f values";
-                    // now check if the node is in closed and open";
-                    int count2 = 0;
-                    if(CLOSED_table.IsIncluded(Make_Node(newx,newy))==true){
-                        count2++;// not updating this node in closed as in simple A star we won't get g values revised after getting in closed.
-                        //std::cout<<"in closed loop and g value got updated.... make this function";
-                    }
+                    if (((int)map[GETMAPINDEX(newx,newy,x_size,y_size)] >= 0) && ((int)map[GETMAPINDEX(newx,newy,x_size,y_size)] < collision_thresh))  //if free
+                    {
+                        //std::cout<<"collision threshold of this point is "<<(int)map[GETMAPINDEX(newx,newy,x_size,y_size)]<<"\n";
+                        //std::cout<<"checked that this node is availible...check if g_val current is greater than new g_val\n";
+                        //if (g_val > (min_g_val+ (int)map[GETMAPINDEX(newx,newy,x_size,y_size)])) { // checking if g(s') > g(s)+c(s,s')
+                                
+                        g_val = (min_g_val+ (int)map[GETMAPINDEX(newx,newy,x_size,y_size)]); // update g and f values in array
+                        h_val = heuristics(goalposeX,goalposeY,newx,newy);
+                        f_val = cal_f_val(g_val,h_val);
+                        //std::cout<<"f values at "<<newx<<" "<<newy<<" is "<<f[newx][newy]<<std::endl;
+                        //std::cout<<"updated f values";
+                        // now check if the node is in closed and open";
+                        
 
-                    int count = 0;
-                    for(int i = 0;i < OPEN.size();i++){
-                        if(Make_Node(newx,newy)==OPEN[i].Node){
-                            //std::cout<<"node found in OPEN loop "<<newx << " "<<newy<<"\n" ;
-                            if(OPEN[i].g > g_val){   
-                                OPEN[i].g = g_val;
-                                OPEN[i].f = f_val;
+                        int count = 0;
+                        for(int i = 0;i < OPEN.size();i++){
+                            if(Make_Node(newx,newy)==OPEN[i].Node){
+                                //std::cout<<"node found in OPEN loop "<<newx << " "<<newy<<"\n" ;
+                                if(OPEN[i].g > g_val){   
+                                    OPEN[i].g = g_val;
+                                    OPEN[i].f = f_val;
+                                }
+                                count++;
+                                break;
                             }
-                            count++;
-                            break;
                         }
-                    }
-                    if(count == 0 && count2 == 0){// if not in open and closed
-                        OPEN.push_back(Object(g_val,h_val,f_val,Make_Node(newx,newy)));
-                        std::cout<<"pushing in the following "<<newx<<" "<<newy<<" "<<g_val<<" "<<f_val<<"\n";
-                    } 
+                        if(count == 0 ){// if not in open and closed
+                            OPEN.push_back(Object(g_val,h_val,f_val,Make_Node(newx,newy)));
+                            //std::cout<<"pushing in the following "<<newx<<" "<<newy<<" "<<g_val<<" "<<f_val<<"\n";
+                        } 
 
+                    }
                 }
 
             }
-            std::cout<<"going for next";
+            //std::cout<<"going for next";
         }  
 
     } 
@@ -290,5 +312,7 @@ std::vector<std::pair<int,int>> do_Astar(
         CLOSED_table.Delete((best));
         
     }
+    
+    std::cout<<"closed table # elem after closed loop "<< CLOSED_table.GetN()<<"\n";
     return action;
 }

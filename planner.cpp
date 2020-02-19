@@ -32,28 +32,17 @@
 
 #define NUMOFDIRS 8
 
+static std::vector<std::pair<int,int>> action_astar ;
 
-static std::vector<std::pair<int,int>> action ;
-
-
-double heuristics(int goalposeX,int goalposeY, int X,int Y){
-    int deltaX = X-goalposeX;
-    int deltaY = Y-goalposeY;
-    return std::max(std::abs(deltaX),std::abs(deltaY))+ 0.4*std::min(std::abs(deltaX),std::abs(deltaY));//sqrt(deltaX*deltaX + deltaY*deltaY);
-}
-
- 
-
-const int weight =10000;
 static std::vector<int> Binary_vec;
 static bool Optimal_path_found ;
 static bool last_few_steps;
-double cal_f_val(int g_val,int h_val){
-    return g_val + weight * h_val ;
-}
+
+
+
 bool If_robot_near_target(int robotposeX,int robotposeY,int targetposeX,int targetposeY,int action_size){
-    int deltaX = (robotposeX-targetposeX);
-    int deltaY = (robotposeY-targetposeY);
+    int deltaX = abs(robotposeX-targetposeX);
+    int deltaY = abs(robotposeY-targetposeY);
     double dist = sqrt((deltaX*deltaX) + (deltaY*deltaY));
     std::cout<<"diff"<<deltaX <<" "<<deltaY<<" "; 
     std::cout<<"distance now is "<<dist<<"action size now is "<<action_size<<"\n";
@@ -62,8 +51,9 @@ bool If_robot_near_target(int robotposeX,int robotposeY,int targetposeX,int targ
     }      
     return false;
 }
+
 bool If_Reachable_by_robot(int action_size,int mid_index,int curr_time){
-    if(action.size() < (mid_index)){ //mid_index-curr_time
+    if(action_size < (mid_index)){ //mid_index-curr_time
         return true;
     }
     return false;
@@ -88,15 +78,12 @@ static void planner(
     // 8-connected grid
     std::cout<< "curr_time:  "<<curr_time << "data" << std::endl;
     std::cout<<"Robotpose "<<robotposeX<<" "<<robotposeY<<" "<<"Target pose "<<targetposeX<<" "<<targetposeY<<std::endl;
-    int dX[NUMOFDIRS] = {-1, -1, -1,  0,  0,  1, 1, 1};
-    int dY[NUMOFDIRS] = {-1,  0,  1, -1,  1, -1, 0, 1};
-    int start_index,end_index,mid_index;
     int goalposeX,goalposeY;
-    HashTable <std::pair<int,int>,double> CLOSED_table;
-    std::vector<Object> OPEN;
+    int start_index,mid_index,end_index;
+    
 
     if(curr_time == 0){
-        action.clear();
+        action_astar.clear();
         start_index = 0;
         end_index =  target_steps;
         mid_index = round(target_steps/2);
@@ -111,11 +98,11 @@ static void planner(
 
     if(Optimal_path_found){
         std::cout<<"Discovered the action sequence with complete solution and now " ;
-        std::cout<<" action.size is "<<action.size()<<std::endl;
-        action_ptr[0] = action[action.size()-1].first;
-        action_ptr[1] = action[action.size()-1].second;
-        action.pop_back();
-        if(If_robot_near_target(robotposeX,robotposeY,targetposeX,targetposeY,action.size())){
+        std::cout<<" action.size is "<<action_astar.size()<<std::endl;
+        action_ptr[0] = action_astar[action_astar.size()-1].first;
+        action_ptr[1] = action_astar[action_astar.size()-1].second;
+        action_astar.pop_back();
+        if(If_robot_near_target(robotposeX,robotposeY,targetposeX,targetposeY,action_astar.size())){
             std::cout<<"now back to A star for closer target";
             Optimal_path_found = false;
             last_few_steps = true;
@@ -123,18 +110,10 @@ static void planner(
         return;
 
     }
-
-
-    
-    
-
-    std::cout<<"closed table # elem at start "<< CLOSED_table.GetN();
-
-
     if(last_few_steps){
-        goalposeX = target_traj[curr_time];
-        goalposeY = target_traj[curr_time+target_steps];
-        std::cout<<"now the goal is "<<goalposeX<<" "<<goalposeY<<"\n";
+        goalposeX = target_traj[curr_time+1];
+        goalposeY = target_traj[curr_time+1+target_steps];
+        std::cout<<"now the goal in last few steps is "<<goalposeX<<" "<<goalposeY<<"\n";
 
     }else{
         goalposeX = target_traj[mid_index];
@@ -158,139 +137,21 @@ static void planner(
         } 
     }
     
-    
-    //if(;;){
-    //if(curr_time == 0 || curr_time % 400 == 399){
-    double g_val =0;
-    double h_val = heuristics(goalposeX,goalposeY, robotposeX,robotposeY);
-    double f_val = cal_f_val(g_val,h_val);
-    
-    OPEN.push_back(Object(g_val,h_val,f_val,Make_Node(robotposeX,robotposeY)));
-    std::make_heap(OPEN.begin(),OPEN.end(),myComparator());
-    auto goal = Make_Node(goalposeX,goalposeY);
-    //std::vector<object2> CLOSED;
 
 
-    // compute the path 
-    while (OPEN.size() != 0){
-        std::push_heap(OPEN.begin(),OPEN.end(),myComparator());// maintaing the order of heap
-        auto min_node = OPEN.front().Node; // returns the smallest Node by soring the f value
-        auto min_g_val = OPEN.front().g;
-        std::cout<<"min node "<< min_node.first<<" "<<min_node.second<<"\n";
-         
-        std::pop_heap(OPEN.begin(),OPEN.end(),myComparator());
-        OPEN.pop_back(); // remove this node from OPEN
-        // if goal reached stop the loop
-        if (min_node == goal){
-            break;
-        }
-        //CLOSED.push_back(object2(min_g_val,min_node)); 
-        CLOSED_table.Update(min_node,min_g_val); // inserting the smallest node and g_val to closed table as Hashtable - goal will not be pushed back into the Closed
-
-        //std::cout<<"passed beyond break \n"; 
-        for(int dir = 0; dir < NUMOFDIRS; dir++)
-        {
-            int newx = min_node.first + dX[dir];
-            int newy = min_node.second + dY[dir];
-
-            if (newx >= 1 && newx <= x_size && newy >= 1 && newy <= y_size)
-            {
-                if (((int)map[GETMAPINDEX(newx,newy,x_size,y_size)] >= 0) && ((int)map[GETMAPINDEX(newx,newy,x_size,y_size)] < collision_thresh))  //if free
-                {
-                    //std::cout<<"checked that this node is availible...check if g_val current is greater than new g_val\n";
-                    //if (g_val > (min_g_val+ (int)map[GETMAPINDEX(newx,newy,x_size,y_size)])) { // checking if g(s') > g(s)+c(s,s')
-                            
-                    g_val = (min_g_val+ (int)map[GETMAPINDEX(newx,newy,x_size,y_size)]); // update g and f values in array
-                    h_val = heuristics(goalposeX,goalposeY,newx,newy);
-                    f_val = cal_f_val(g_val,h_val);
-                    //std::cout<<"f values at "<<newx<<" "<<newy<<" is "<<f[newx][newy]<<std::endl;
-                    //std::cout<<"updated f values";
-                    // now check if the node is in closed and open";
-                    int count2 = 0;
-                    if(CLOSED_table.IsIncluded(Make_Node(newx,newy))==true){
-                        count2++;// not updating this node in closed as in simple A star we won't get g values revised after getting in closed.
-                        //std::cout<<"in closed loop and g value got updated.... make this function";
-                    }
-
-                    int count = 0;
-                    for(int i = 0;i < OPEN.size();i++){
-                        if(Make_Node(newx,newy)==OPEN[i].Node){
-                            //std::cout<<"node found in OPEN loop "<<newx << " "<<newy<<"\n" ;
-                            if(OPEN[i].g > g_val){   
-                                OPEN[i].g = g_val;
-                                OPEN[i].f = f_val;
-                            }
-                            count++;
-                            break;
-                        }
-                    }
-                    if(count == 0 && count2 == 0){// if not in open and closed
-                        OPEN.push_back(Object(g_val,h_val,f_val,Make_Node(newx,newy)));
-                        std::cout<<"pushing in the following "<<newx<<" "<<newy<<" "<<g_val<<" "<<f_val<<"\n";
-                    } 
-
-                }
-
-            }
-            std::cout<<"going for next";
-        }  
-
-    } 
-    // duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC;
-    // std::cout<<"Duration after open loop "<< duration <<'\n';
-    //std::cout<<"planning is done now tracking back\n";
-    
-    std::pair<int,int> best;
-
-    auto track = goal;
-    //auto action2 = action;
-    action.clear();
-
-    std::cout<<"closed table # elem after open loop "<< CLOSED_table.GetN()<<"\n";
-
-    while(  track != Make_Node(robotposeX,robotposeY) && CLOSED_table.GetN()>= 0){
-        int check = std::numeric_limits<int>::max(); // some max value
-        action.push_back(track);
-        //int count =0;
-        //std::cout<<"inside closed loop \n";
-        for(int dir = 0; dir < NUMOFDIRS; dir++)
-        {
-            int newx = track.first + dX[dir];
-            int newy = track.second + dY[dir];
-            auto back_track_node = Make_Node(newx,newy);
-            //for(int i = 0;i < CLOSED.size();i++){
-            if(CLOSED_table.IsIncluded((back_track_node))){
-                //std::cout<<"node found in OPEN loop \n";
-                auto cost = *CLOSED_table[(back_track_node)]+(int)map[GETMAPINDEX(newx,newy,x_size,y_size)] ;  
-                if(check >= cost){ 
-                    check = cost ; // if in closed loop and g+c is best then go to that s
-                    best = back_track_node;
-
-                    //count++;
-                    //std::cout<<"count inside the CLOSED loop \n";
-                }
-            }
-            
-        }
-        // duration = ( std::clock() - start ) / (double) CLOCKS_PER_SEC;
-        // std::cout<<"Duration after open loop "<< duration <<'\n';
-
-        track = best;
-        //std::cout<< " pushing back " <<bestX <<" "<<bestY<<"\n";
-        //CLOSED.erase(CLOSED.begin()+best); // deletes the ith element;
-        CLOSED_table.Delete((best));
-        
+    if(!Optimal_path_found){// if optimal path found is false i.e both initially and last few steps
+        action_astar = do_Astar(map,collision_thresh,x_size,y_size,robotposeX,robotposeY,target_steps,target_traj,targetposeX,targetposeY,curr_time,goalposeX,goalposeY);
+// this will automatically update the action sequence
     }
-   
-
-    std::cout<<"closed table # elem after closed loop "<< CLOSED_table.GetN()<<"\n";
     
-    action_ptr[0] = action[action.size()-1].first;
-    action_ptr[1] = action[action.size()-1].second;
-    std::cout<<"action size "<<action.size()<<" ";
+
+
+    action_ptr[0] = action_astar[action_astar.size()-1].first;
+    action_ptr[1] = action_astar[action_astar.size()-1].second;
+    std::cout<<"action size "<<action_astar.size()<<" ";
     std::cout<<"action "<< action_ptr[0] <<" "<< action_ptr[1]<<"goal "<<goalposeX<<" "<<goalposeY<< "\n";
     std::cout<<"cost of the goals "<<(int)map[GETMAPINDEX(goalposeX,goalposeY,x_size,y_size)]<<"\n";
-    action.pop_back();
+    action_astar.pop_back();
     
     //Binary_search bin(robotposeX,robotposeY,target_traj,target_steps,start_index,end_index,action.size(),curr_time);
     //Binary_search(robotposeX,robotposeY,target_traj,target_steps,start_index,end_index,action.size(),curr_time).Get_Mid_target_index();
@@ -298,7 +159,7 @@ static void planner(
     if(!last_few_steps){
         Binary_vec.clear();
         
-        if(!If_Reachable_by_robot(action.size(),mid_index,curr_time)){ // if not reachabel by robot
+        if(!If_Reachable_by_robot(action_astar.size(),mid_index,curr_time)){ // if not reachabel by robot
             Binary_vec.push_back(mid_index);// pushing back next start_node
             Binary_vec.push_back(end_index);
             int new_mid = (mid_index+end_index)/2;
@@ -311,9 +172,9 @@ static void planner(
         }
         int diff = abs(Binary_vec[0]-Binary_vec[2]);
         std::cout<<"next start index will be "<<Binary_vec[0]<<" "<<Binary_vec[1]<<" "<<Binary_vec[2]<<"\n";
-        if(diff < 3 && If_Reachable_by_robot(action.size(),mid_index,curr_time)){
+        if(diff < 3 && If_Reachable_by_robot(action_astar.size(),mid_index,curr_time)){
             std::cout<<"reached optimal position .... just execute steps\n";
-            std::cout<<"so goal pose would be "<<target_traj[mid_index]<<" "<<target_traj[mid_index+target_steps]<<"\n";
+            std::cout<<"difference btw start and mid is "<<diff<<"so goal pose would be "<<target_traj[mid_index]<<" "<<target_traj[mid_index+target_steps]<<"\n";
             Optimal_path_found = true;
         }
     }
