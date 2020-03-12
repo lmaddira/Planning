@@ -41,7 +41,7 @@
 #define LINKLENGTH_CELLS 10
 
 
-static void planner(
+static void RRT_Connectplanner(
        double*  map,
        int x_size,
        int y_size,
@@ -55,36 +55,138 @@ static void planner(
   int E = sqrt(0.2*numofDOFs);
   vector<double> qrand(numofDOFs);
   vector<double> qstart(numofDOFs);
-  RRTplanner rrt(map,x_size,y_size,armstart_anglesV_rad,armgoal_anglesV_rad,numofDOFs,plan,planlength);
+  vector<double> qgoal(numofDOFs);
+  RRTconnectplanner startTree(map,x_size,y_size,armstart_anglesV_rad,armgoal_anglesV_rad,numofDOFs,plan,planlength);
+  RRTconnectplanner goalTree(map,x_size,y_size,armstart_anglesV_rad,armgoal_anglesV_rad,numofDOFs,plan,planlength);
   // start at q start add the vertex 
-  for(int i=0;i<numofDOFs;i++) qstart[i]=armstart_anglesV_rad[i];
+  for(int i=0;i<numofDOFs;i++){
+    qstart[i]=armstart_anglesV_rad[i];
+    qgoal[i] = armgoal_anglesV_rad[i];
+  } 
   if(!IsValidArmConfiguration(armgoal_anglesV_rad, numofDOFs, map,x_size, y_size)){
     cout<<"invalid goal configuration \n";
     return;
   }
-  rrt.add_vertex(qstart);
-  bool goalpoint = false;
-  bool goalreached = false;
-  for(int i=0;i<num;i++){
-    if(rand90() && (i+1)!=num){
-      randomSample(qrand);
-    }else{
-      goalpoint = true;
-      goalSample(qrand,armgoal_anglesV_rad);
-    }
-    rrt.extend(qrand,E);
-    if(goalpoint){
-      goalpoint = false;
-      goalreached = rrt.ReachedGoal(rrt.points.size()-1);
-    }
-    if(goalreached){
-      cout<<"reached goal";
-      break;
-    } 
+  if(!IsValidArmConfiguration(armstart_anglesV_rad, numofDOFs, map,x_size, y_size)){
+    cout<<"invalid start configuration \n";
+    return;
   }
+  startTree.add_vertex(qstart);
+  goalTree.add_vertex(qgoal);
+  bool treesmet = false;
+  //bool goalreached = false;
+  for(int i=0;i<num;i++){
+    
+    if(i%2==0){ // alternatively extending the trees
+      randomSample(qrand);
+      startTree.extend(qrand,E);
+      cout<<"start extended \n";
+      vector<double> qnew(numofDOFs);
+      startTree.getLastAngle(qnew);// get last element
+      cout<<"now connecting from goal tree\n";
+      treesmet = goalTree.connect(qnew);// same as extend but should return if it reached the point - bool
+      if(treesmet){
+        cout<<"both the trees met from start\n";
+        break;
+      }
+    }else{
+      randomSample(qrand);
+      goalTree.extend(qrand,E);
+      cout<<"goal extended \n";
+      vector<double> qnew(numofDOFs);
+      goalTree.getLastAngle(qnew);// get last element
+      cout<<"now connecting from start tree\n";
+      treesmet = startTree.connect(qnew);// same as extend but should return if it reached the point - bool
+      if(treesmet){
+        cout<<"both the trees met from sample at goal\n";
+        break;
+      }
+    }
 
-  rrt.backtrack();
-  rrt.return_plan();
+  }
+  goalTree.backtrack();  // from connecting point to goal
+  startTree.backtrack(); // from connecting point to start
+  vector<vector<double>> goal_plan;
+  vector<vector<double>> start_plan;
+  goalTree.get_backtrack(goal_plan);
+  startTree.get_backtrack(start_plan);
+  startTree.returnConnect_plan(start_plan,goal_plan);
+
+  return;
+
+}
+
+/*
+static void RRT_Connectplanner(
+       double*  map,
+       int x_size,
+       int y_size,
+           double* armstart_anglesV_rad,
+           double* armgoal_anglesV_rad,
+     int numofDOFs,
+     double*** plan,
+     int* planlength)
+{
+  int num = 10000;
+  int E = sqrt(0.2*numofDOFs);
+  vector<double> qrand(numofDOFs);
+  vector<double> qstart(numofDOFs);
+  vector<double> qgoal(numofDOFs);
+  RRTconnectplanner startTree(map,x_size,y_size,armstart_anglesV_rad,armgoal_anglesV_rad,numofDOFs,plan,planlength);
+  RRTconnectplanner goalTree(map,x_size,y_size,armstart_anglesV_rad,armgoal_anglesV_rad,numofDOFs,plan,planlength);
+  // start at q start add the vertex 
+  for(int i=0;i<numofDOFs;i++){
+    qstart[i]=armstart_anglesV_rad[i];
+    qgoal[i] = armgoal_anglesV_rad[i];
+  } 
+  if(!IsValidArmConfiguration(armgoal_anglesV_rad, numofDOFs, map,x_size, y_size)){
+    cout<<"invalid goal configuration \n";
+    return;
+  }
+  if(!IsValidArmConfiguration(armstart_anglesV_rad, numofDOFs, map,x_size, y_size)){
+    cout<<"invalid start configuration \n";
+    return;
+  }
+  startTree.add_vertex(qstart);
+  goalTree.add_vertex(qgoal);
+  bool treesmet = false;
+  //bool goalreached = false;
+  for(int i=0;i<num;i++){
+    
+    if(i%2==0){ // alternatively extending the trees
+      randomSample(qrand);
+      startTree.extend(qrand,E);
+      cout<<"start extended \n";
+      vector<double> qnew(numofDOFs);
+      startTree.getLastAngle(qnew);// get last element
+      cout<<"now connecting from goal tree\n";
+      treesmet = goalTree.connect(qnew);// same as extend but should return if it reached the point - bool
+      if(treesmet){
+        cout<<"both the trees met from start\n";
+        break;
+      }
+    }else{
+      randomSample(qrand);
+      goalTree.extend(qrand,E);
+      cout<<"goal extended \n";
+      vector<double> qnew(numofDOFs);
+      goalTree.getLastAngle(qnew);// get last element
+      cout<<"now connecting from start tree\n";
+      treesmet = startTree.connect(qnew);// same as extend but should return if it reached the point - bool
+      if(treesmet){
+        cout<<"both the trees met from sample at goal\n";
+        break;
+      }
+    }
+
+  }
+  goalTree.backtrack();  // from connecting point to goal
+  startTree.backtrack(); // from connecting point to start
+  vector<vector<double>> goal_plan;
+  vector<vector<double>> start_plan;
+  goalTree.get_backtrack(goal_plan);
+  startTree.get_backtrack(start_plan);
+  startTree.returnConnect_plan(start_plan,goal_plan);
 
   return;
 
@@ -107,6 +209,14 @@ static void RRT_planner(
   RRTplanner rrt(map,x_size,y_size,armstart_anglesV_rad,armgoal_anglesV_rad,numofDOFs,plan,planlength);
   // start at q start add the vertex 
   for(int i=0;i<numofDOFs;i++) qstart[i]=armstart_anglesV_rad[i];
+  if(!IsValidArmConfiguration(armgoal_anglesV_rad, numofDOFs, map,x_size, y_size)){
+    cout<<"invalid goal configuration \n";
+    return;
+  }
+  if(!IsValidArmConfiguration(armstart_anglesV_rad, numofDOFs, map,x_size, y_size)){
+    cout<<"invalid start configuration \n";
+    return;
+  }
   rrt.add_vertex(qstart);
   bool goalpoint = false;
   bool goalreached = false;
@@ -201,9 +311,8 @@ static void planner(
 //1st is a 2D matrix plan when each plan[i][j] is the value of jth angle at the ith step of the plan
 //(there are D DoF of the arm (that is, D angles). So, j can take values from 0 to D-1
 //2nd is planlength (int)
-void mexFunction( int nlhs, mxArray *plhs[], 
-		  int nrhs, const mxArray*prhs[])
-     
+
+void mexFunction( int nlhs, mxArray *plhs[],int nrhs, const mxArray*prhs[])
 { 
     
     /* Check for proper number of arguments */    

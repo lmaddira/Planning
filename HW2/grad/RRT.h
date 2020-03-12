@@ -328,9 +328,13 @@ public:
     }
     return;
   }
-
+  void get_backtrack(vector<vector<double>> &newplan){
+    int n = backtrackplan.size();
+    for(int i=0;i<n;i++){
+      newplan.push_back(backtrackplan[i]);
+    }
+  }
   void return_plan() {
-
     *plan = NULL;
     *planlength = 0;
 
@@ -339,7 +343,7 @@ public:
     for (int i = 0; i < total; i++) {
       (*plan)[i] = (double*)malloc(numofDOFs * sizeof(double));
       for (int j = 0; j < numofDOFs; j++) {
-        (*plan)[i][j] = backtrackplan[i][j];
+        (*plan)[i][j] = backtrackplan[total-1-i][j];
       }
     }
     *planlength = total;
@@ -349,6 +353,14 @@ public:
   int getLastIndex(){
     return points.size()-1;
   }
+  void getLastAngle(vector<double> &qnew){
+    int n = points.size()-1;
+    for(int i=0;i<numofDOFs;i++){
+      qnew[i]=points[n].angles[i];
+    }
+    return;
+  }
+
 
 };
 enum RRT_result{
@@ -411,6 +423,61 @@ public:
   }
 
 };
+class RRTconnectplanner : public RRTplanner{
+public:
+  RRTconnectplanner(double*  map,int x_size,  int y_size,  double* armstart_anglesV_rad,  double* armgoal_anglesV_rad,  int numofDOFs,  
+    double*** plan,  int* planlength): RRTplanner(map,x_size,y_size, armstart_anglesV_rad, armgoal_anglesV_rad,numofDOFs, plan, planlength){}
+
+  
+  bool connect(vector<double> &qrand){ // returns if it met the point qrand (same as extend)
+    vector<double> qnew(numofDOFs);
+    int qnearID = nearestNeighbour(qrand);
+    cout<<"nearest neighbour "<<qnearID<<"\n";
+    RRT_result result = newConfig(qrand,qnearID,qnew,INT8_MAX);
+    cout<<"result "<<result<<"\n";
+    if(result!=trapped){
+      int childID = add_vertex(qnew);
+      add_edge(childID,qnearID);
+      if(result==reached){ 
+        return true;
+      }
+    }
+    return false;
+  }
+  void returnConnect_plan(vector<vector<double>> &startplan,vector<vector<double>> &goalplan) {
+    *plan = NULL;
+    *planlength = 0;
+
+    int start_total = startplan.size();
+    int goal_total = goalplan.size();
+    cout<<"start plan length "<<start_total<<" goal plan length "<<goal_total<<"\n";
+    int total = start_total+goal_total;
+    *plan = (double**)malloc(total * sizeof(double*));
+    for (int i = 0; i < start_total; i++) {
+      cout<<"\nplan "<<i<<" ";
+      (*plan)[i] = (double*)malloc(numofDOFs * sizeof(double));
+      for (int j = 0; j < numofDOFs; j++) {
+        (*plan)[i][j] = startplan[start_total-1-i][j];
+        cout<<" Q"<<j<<" "<<startplan[start_total-1-i][j];
+      }
+    }
+    cout<<"pushing the goal tree now\n";
+    for (int i = start_total; i < total; i++) {
+      cout<<"\nplan "<<i<<" ";
+      (*plan)[i] = (double*)malloc(numofDOFs * sizeof(double));
+      for (int j = 0; j < numofDOFs; j++) {
+        (*plan)[i][j] = goalplan[i-start_total][j];
+        cout<<" Q"<<j<<" "<<goalplan[i-start_total][j];
+      }
+    }
+    *planlength = total;
+    cout<<"plan length "<<total;
+    return;
+  }
+  
+
+
+};
 
 void randomSample(vector<double> & qrand){
   //srand((int)time(nullptr));
@@ -450,11 +517,4 @@ bool rand90()
 {
   return (rand75() | rand50());
 }
-// void startSample(vector<double> qrand,double* armstart_anglesV_rad){
-//     // goal as sample
-//   for(int i = 0; i<qrand.size();i++){
-//     qrand[i] = armstart_anglesV_rad[i]; 
-//     std::cout<< "start  Q"<<i<<" "<<Q[i]<< " ";
-//   }
-//   return;
-// }
+
