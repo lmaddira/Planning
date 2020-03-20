@@ -3,8 +3,8 @@
 #include <time.h>
 #include <vector>
 #include <queue>
-#include <set>
 #include <map>
+#include <unordered_map>
 #include <cstdio>
 #include <ctime>
 #include "mex.h"
@@ -219,7 +219,19 @@ int IsValidArmConfiguration(double* angles, int numofDOFs, double*	map,
 struct Node{
   vector<double> angles;
   double ID; // it's own id
-  double parentID; // it's parent id
+  double parentID; // it's parent id equivalent to tree id in PRM
+  vector<int> neighbours; // index of neighbours used in PRM 
+  double f;
+  double g;
+};
+
+struct Compare { 
+    bool operator()(Node const& N1, Node const& N2) 
+    { 
+        // return "true" if "p1" is ordered  
+        // before "p2", for example: 
+        return N1.f > N2.f; 
+    } 
 };
 
 // general planner functions
@@ -262,17 +274,20 @@ public:
     points[child].parentID = parent;
     return ;
   }
+  
 
   double distance(int index, vector<double> &qrand){
     double dist=0;
     double temp;
     for(int i=0;i<numofDOFs;i++){
-      temp  = points[index].angles[i] - qrand[i];
+      temp  = points[index] .angles[i] - qrand[i];
       dist+=temp*temp;
     }
     return sqrt(dist); // euclidean distance returned 
   }
-
+  double distance(int index1,int index2){
+    return distance(index1,points[index2].angles);
+  }
   // brute force search for nearest neighbour
   int nearestNeighbour(vector<double> &qrand){
     double min_dist = INT8_MAX; // max number
@@ -291,7 +306,7 @@ public:
   // checks the validity of the edge and returns the place where edge stops being valid
   bool valid_edge(int index, vector<double> & qrand) {
     double dist = 0;
-
+    cout<<" checking validity of edge\n";
     for (int i = 0; i < numofDOFs; i++) {
       if (dist < abs(points[index].angles[i] - qrand[i])) {
         dist = abs(points[index].angles[i] - qrand[i]);
@@ -305,7 +320,10 @@ public:
         intermediate[j] = points[index].angles[j] + ((double)(i) / (numofsamples - 1))*(qrand[j] - points[index].angles[j]);
       }
 
-      if (!IsValidArmConfiguration(intermediate.data(), numofDOFs, map, x_size, y_size)) return false;
+      if (!IsValidArmConfiguration(intermediate.data(), numofDOFs, map, x_size, y_size)){
+        cout<<"invalid arm configuration for sample "<<numofsamples<<"\n";
+        return false;
+      } 
     }
     return true;
   }
@@ -473,24 +491,198 @@ public:
     *planlength = total;
     cout<<"plan length "<<total;
     return;
+  }  
+};
+class PRMplanner : public searchBasedPlanner{
+public:
+  PRMplanner(double*  map,int x_size,  int y_size,  double* armstart_anglesV_rad,  double* armgoal_anglesV_rad,  int numofDOFs,  
+    double*** plan,  int* planlength): searchBasedPlanner(map,x_size,y_size, armstart_anglesV_rad, armgoal_anglesV_rad,numofDOFs, plan, planlength){}
+
+  int add_vertex(vector<double> &qnew){
+    int size = points.size(); // take the size of the current node to add next node 
+    points.push_back(Node());
+    points[size].angles = qnew;
+    points[size].ID = size;
+    points[size].g = INT8_MAX;
+    points[size].parentID = size;
+    cout<<" parent being initialised in add_vertex "<< points[size].parentID<<"\n";
+    return size;
+  }
+  // gives the tree_root parent index 
+  int tree_root(int index){
+    if(points[index].parentID!=index){
+      points[index].parentID = tree_root(points[index].parentID);
+    }
+    return points[index].parentID;
+  }
+  // will return if the parents are same that is if they are in same tree.
+  bool same_tree(int index1,int index2){
+    int a1 = tree_root(index1);
+    int a2 = tree_root(index2);
+    cout<<" tree of old point "<<index1<< " is "<<a1<<" and "<<index2<<" "<<a2<<"\n";
+    int check =0;
+    if(a1==a2){
+      check++;
+    }
+    if(check==0){
+      return false;
+    }
+    return true;
+  }
+  void add_all_edges(int child, int parent){
+    points[child].neighbours.push_back(parent);
+    points[parent].neighbours.push_back(child);
+    points[tree_root(parent)].parentID = tree_root(child);
+    cout<<" tree is "<<tree_root(parent)<<"\n";
+    return;
+
+  }
+  void adjacentNeighbours(int newpointID, int radius){
+    int index;
+    double dist;   
+    for(int i=0;i<points.size();i++){
+      if(i==newpointID) continue;
+      dist = distance(i,newpointID); // if a point is found in the radius then add the point edge both sides
+      if(dist<radius){
+        cout<<" found distance with in radius at index "<<i<<" \n";
+        if(!same_tree(i,newpointID)|| points[newpointID].neighbours.size()< 8){ // max number of same tree connections can be 8 
+          if(valid_edge(i, points[newpointID].angles)){
+            cout<<"valid edge \n";
+            add_all_edges(i,newpointID);
+            cout<<"added edge \n";
+          }
+        }
+      } 
+    }
+    return;
   }
   
 
+  void find_path(int startindex,int goalindex){
+    //Do backward Astar search with the graph build by random samples 
+    vector<Node> OPEN;
+    unordered_map<int, double> CLOSED;
+    int weight = 10; // or u can get this from main function
+    // intiate gval, h and f val for start
+    cout<<"started backward A star planning.....\n";
+    OPEN.clear();
+    cout<<"OPEN size at start "<<OPEN.size()<<"\n";
+    points[startindex].g = 0;
+    points[startindex].f = points[startindex].g + 10*distance(startindex,goalindex); // f = g+h;
+    OPEN.push_back(points[startindex]); // pushing back a node
+    cout<<" pushed back goal point and its index is "<<startindex<<"\n";
 
-};
+    int n=0;
+    cout<<"checking if start has any neighbours "<<points[goalindex].neighbours.size()<<"\n";
+    while(OPEN.size()>0)
+    {
+      n++;
+      make_heap(OPEN.begin(),OPEN.end(),Compare());
+      push_heap(OPEN.begin(),OPEN.end(),Compare());
+      // cout << "all nodes in OPEN now ";
+      // for(int i=0;i<OPEN.size();i++){
+      //   cout<<OPEN[i].ID<<" and f value is "<<OPEN[i].f<<" \n";
+      // }
+      cout<<"\n";
+      Node min_node = OPEN.front();
+      pop_heap(OPEN.begin(),OPEN.end(),Compare());
+      OPEN.pop_back();
+      // cout << "all nodes in OPEN now after pop back ";
+      // for(int i=0;i<OPEN.size();i++){
+      //   cout<<OPEN[i].ID<<" ";
+      // }
+      double min_gval = min_node.g;
+      int min_index = min_node.ID; 
+      cout<<" min_index..."<<min_index<<"\n"; 
+      cout<<"no of neighbours for minnode is "<<min_node.neighbours.size()<<"\n";
+      if(min_index == goalindex){
+        CLOSED.insert(make_pair(min_index,min_gval));
+        cout<<" goal point expanded by A star algorithm\n";
+        break;
+      }
+      CLOSED.insert(make_pair(min_index,min_gval));
+      for(int i=0;i< min_node.neighbours.size();i++){ // for all the neighbours find the min f val
+        int index = min_node.neighbours[i];
+        //cout<<"neighbour index is "<<index<<"\n";
+        if(CLOSED.find(index)==CLOSED.end()) // if not found in closed loop
+        {
+          //cout<<"not in closed loop \n";
+          double g_val = min_gval + distance(min_index,index); // g(s') = g(s)+c(s,s');
+          double h_val = distance(goalindex,index);
+          double f_val = g_val+ weight*h_val; 
+          int count =0; 
+          for(int i=0;i<OPEN.size();i++){
+            //cout<<" ID in OPEN now is "<<OPEN[i].ID<<" index is "<<index<<"\n";
+            if(OPEN[i].ID == index){
+              if(OPEN[i].g > g_val){
+                OPEN[i].g = g_val;
+                OPEN[i].f = f_val;
+                cout<<"updating f_val\n";
+              }
+              count++;
+              break;
+            }
+          }
+          if(count == 0){
+            points[index].g = g_val;
+            points[index].f = f_val;
+            OPEN.push_back(points[index]);
+            cout<<"adding new point to OPEN \n";
+          }
+        }    
+      }
+    }
+    auto track = goalindex;
+    int best_index;
+    cout<<" OPEN loop expanded goal and size is "<<OPEN.size()<<" \n";
+    cout<<" closed loop size before backtrack  "<<CLOSED.size()<<" \n";
+    cout<<"all points in closed loop ";
+    for(auto &i:CLOSED){
+      cout<<"index "<<i.first<<" g value "<<i.second<<" \n";
+    }
+    if(CLOSED.find(goalindex)==CLOSED.end()){
+      cout<<" goal not found in the given sample set.... planning failed\n";
+      return;
+    }
+
+    while(track!=startindex && CLOSED.size()>0){
+      double check = INT8_MAX;
+      CLOSED.erase(track);
+      backtrackplan.push_back(points[track].angles);
+      for(auto index : points[track].neighbours){
+        cout<<"checking current neighbour "<<index<<" ";
+        if(CLOSED.find(index)!=CLOSED.end()){
+          cout<<"\n found this neighbour in closed "<<index<<"\n";
+          auto cost = CLOSED[index]+ distance(index,track);
+          if(check > cost){
+            check = cost;
+            best_index = index;
+          }
+        }
+      }
+      track = best_index;
+      cout<<"best index "<<track<<"\n";
+    }
+    backtrackplan.push_back(points[track].angles);
+    cout<<"planning done\n";
+    return;
+  }
+
+
+}; 
 
 void randomSample(vector<double> & qrand){
   //srand((int)time(nullptr));
   for (int i = 0; i<qrand.size();i++){
-    if(i == 0){
-      qrand[i] = fmod(rand(),PI/2);
-      std::cout<< " Q0"<<qrand[i]<< " ";
-    }
-    else
-    {
-      qrand[i] = fmod(rand(),(2*PI)); 
-      std::cout<< " Q"<<i<<" "<<qrand[i]<< " ";
-    }
+    // if(i == 0){
+    //   qrand[i] = fmod(rand(),PI/2);
+    //   std::cout<< " Q0"<<qrand[i]<< " ";
+    // }
+    // else
+    // {
+    qrand[i] = fmod(rand(),(2*PI)); 
+    std::cout<< " Q"<<i<<" "<<qrand[i]<< " ";
+    // }
   }
   //std::cout<<"\n";
   return;
@@ -516,5 +708,19 @@ bool rand75()
 bool rand90()
 {
   return (rand75() | rand50());
+}
+void goalarea_Sample(vector<double> &qrand,double* armgoal_anglesV_rad){
+  // goal as sample
+
+  for(int i = 0; i<qrand.size();i++){
+    if(rand50()){
+      qrand[i] = armgoal_anglesV_rad[i] + (fmod(rand(),PI/40)); 
+    }else{
+      qrand[i] = armgoal_anglesV_rad[i] - (fmod(rand(),PI/40));
+    }
+    std::cout<< "goal  Q"<<i<<" "<<qrand[i]<< " ";
+  }
+  
+  return;
 }
 

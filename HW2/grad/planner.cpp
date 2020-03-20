@@ -40,8 +40,7 @@
 //the length of each link in the arm (should be the same as the one used in runtest.m)
 #define LINKLENGTH_CELLS 10
 
-
-static void RRT_Connectplanner(
+static void planner(
        double*  map,
        int x_size,
        int y_size,
@@ -52,12 +51,12 @@ static void RRT_Connectplanner(
      int* planlength)
 {
   int num = 10000;
-  int E = sqrt(0.2*numofDOFs);
+  int E = sqrt(0.5*numofDOFs);
   vector<double> qrand(numofDOFs);
   vector<double> qstart(numofDOFs);
   vector<double> qgoal(numofDOFs);
-  RRTconnectplanner startTree(map,x_size,y_size,armstart_anglesV_rad,armgoal_anglesV_rad,numofDOFs,plan,planlength);
-  RRTconnectplanner goalTree(map,x_size,y_size,armstart_anglesV_rad,armgoal_anglesV_rad,numofDOFs,plan,planlength);
+  PRMplanner graph(map,x_size,y_size,armstart_anglesV_rad,armgoal_anglesV_rad,numofDOFs,plan,planlength); // build the graph
+
   // start at q start add the vertex 
   for(int i=0;i<numofDOFs;i++){
     qstart[i]=armstart_anglesV_rad[i];
@@ -71,53 +70,42 @@ static void RRT_Connectplanner(
     cout<<"invalid start configuration \n";
     return;
   }
-  startTree.add_vertex(qstart);
-  goalTree.add_vertex(qgoal);
-  bool treesmet = false;
-  //bool goalreached = false;
+  int start_index = graph.add_vertex(qstart);// add both start and goal nodes to the graph
+  int goal_index = graph.add_vertex(qgoal);
+  cout<<"started the sampling\n";
   for(int i=0;i<num;i++){
     
-    if(i%2==0){ // alternatively extending the trees
-      randomSample(qrand);
-      startTree.extend(qrand,E);
-      cout<<"start extended \n";
-      vector<double> qnew(numofDOFs);
-      startTree.getLastAngle(qnew);// get last element
-      cout<<"now connecting from goal tree\n";
-      treesmet = goalTree.connect(qnew);// same as extend but should return if it reached the point - bool
-      if(treesmet){
-        cout<<"both the trees met from start\n";
-        break;
-      }
+    if(rand75()){ // alternatively extending the trees
+      do{
+        randomSample(qrand);
+        cout<<"random sample \n";
+      }while(!IsValidArmConfiguration(qrand.data(),numofDOFs, map,x_size, y_size));
+      cout<<" checked the validity of sample";
+      int index = graph.add_vertex(qrand);
+      cout<<"added vertex \n";
+      graph.adjacentNeighbours(index, E);
+      cout<<"added adjacent neighbours\n";
     }else{
-      randomSample(qrand);
-      goalTree.extend(qrand,E);
-      cout<<"goal extended \n";
-      vector<double> qnew(numofDOFs);
-      goalTree.getLastAngle(qnew);// get last element
-      cout<<"now connecting from start tree\n";
-      treesmet = startTree.connect(qnew);// same as extend but should return if it reached the point - bool
-      if(treesmet){
-        cout<<"both the trees met from sample at goal\n";
-        break;
-      }
+      do{
+        //goalarea_Sample(qrand,armgoal_anglesV_rad);
+        randomSample(qrand);
+        cout<<"goal sample \n";
+      }while(IsValidArmConfiguration(qrand.data(),numofDOFs, map,x_size, y_size));
+      cout<<" checked the validity of sample";
+      int index = graph.add_vertex(qrand);
+      cout<<"added vertex \n";
+      graph.adjacentNeighbours(index, E);
+      cout<<"added adjacent neighbours\n";
     }
-
   }
-  goalTree.backtrack();  // from connecting point to goal
-  startTree.backtrack(); // from connecting point to start
-  vector<vector<double>> goal_plan;
-  vector<vector<double>> start_plan;
-  goalTree.get_backtrack(goal_plan);
-  startTree.get_backtrack(start_plan);
-  startTree.returnConnect_plan(start_plan,goal_plan);
-
+  cout<<"graph made \n";
+  graph.find_path(start_index,goal_index);
+  graph.return_plan();
   return;
 
 }
-
 /*
-static void RRT_Connectplanner(
+static void planner(
        double*  map,
        int x_size,
        int y_size,
@@ -180,15 +168,19 @@ static void RRT_Connectplanner(
     }
 
   }
-  goalTree.backtrack();  // from connecting point to goal
-  startTree.backtrack(); // from connecting point to start
-  vector<vector<double>> goal_plan;
-  vector<vector<double>> start_plan;
-  goalTree.get_backtrack(goal_plan);
-  startTree.get_backtrack(start_plan);
-  startTree.returnConnect_plan(start_plan,goal_plan);
-
-  return;
+  if(treesmet){
+    goalTree.backtrack();  // from connecting point to goal
+    startTree.backtrack(); // from connecting point to start
+    vector<vector<double>> goal_plan;
+    vector<vector<double>> start_plan;
+    goalTree.get_backtrack(goal_plan);
+    startTree.get_backtrack(start_plan);
+    startTree.returnConnect_plan(start_plan,goal_plan);
+    return;
+  }else{
+    cout<<"planner couldn't reach the goal, try once more ....";
+      return;
+  }
 
 }
 /*
