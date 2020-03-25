@@ -40,8 +40,91 @@
 //the length of each link in the arm (should be the same as the one used in runtest.m)
 #define LINKLENGTH_CELLS 10
 
+static void RRTStar_planner(
+       double*  map,
+       int x_size,
+       int y_size,
+           double* armstart_anglesV_rad,
+           double* armgoal_anglesV_rad,
+     int numofDOFs,
+     double*** plan,
+     int* planlength)
+{
+  int num = 10;
+  int num_max = 10000;
+  double E = (double)sqrt(0.5*numofDOFs);
+  double gamma = 1000; 
+  vector<double> qrand(numofDOFs);
+  vector<double> qstart(numofDOFs);
+  vector<double> qgoal(numofDOFs);
+  bool goalpoint = false;
+  bool goalreached = false;
+  
+  RRTstarplanner rrtstar(map,x_size,y_size,armstart_anglesV_rad,armgoal_anglesV_rad,numofDOFs,plan,planlength); 
 
-static void RRT_Connectplanner(
+  // start at q start add the vertex 
+  for(int i=0;i<numofDOFs;i++){
+    qstart[i]=armstart_anglesV_rad[i];
+    qgoal[i] = armgoal_anglesV_rad[i];
+  } 
+  if(!IsValidArmConfiguration(armgoal_anglesV_rad, numofDOFs, map,x_size, y_size)){
+    cout<<"invalid goal configuration \n";
+    return;
+  }
+  if(!IsValidArmConfiguration(armstart_anglesV_rad, numofDOFs, map,x_size, y_size)){
+    cout<<"invalid start configuration \n";
+    return;
+  }
+  int start_index = rrtstar.add_vertex(qstart);// add both start nodes to the rrtstar
+  rrtstar.points[start_index].g = 0;// adding g=0 for start index
+  cout<<"started the sampling\n";
+  int goalarea = 0; int goal=0;
+  for(int i=0;i<num;i++){
+    if(rand75() && (i+1)!=num){
+      randomSample(qrand);
+    }else if((i+1)!=num){
+      goalpoint = true;
+      goalarea++;
+      goalarea_Sample(qrand,armgoal_anglesV_rad);
+    }else{
+      goalpoint = true;
+      goal++;
+      goalSample(qrand,armgoal_anglesV_rad);
+    }
+    rrtstar.extend_rewire(qrand,E,gamma);
+    
+    if(goalpoint){
+      goalpoint = false;
+      goalreached = rrtstar.ReachedGoal(rrtstar.points.size()-1);
+    }
+    if((i+1)==num && !goalreached){
+      if(num<num_max)
+      {
+        num += (1000);
+        std::cout<<"printing out increased num "<<num<<"\n";
+      }
+    } 
+    if(goalreached){
+      cout<<"reached goal";
+      break;
+    }
+  }
+  std::cout<<"printing out increased num "<<num<<"\n";
+  std::cout<<" goal area points "<<goalarea<<" goal points "<<goal<<"\n";
+  if(goalreached){
+    rrtstar.backtrack();
+    rrtstar.return_plan();
+  }else{
+    std::cout<<"goal couldn't be reached .... try to replan ......\n";
+  }
+   
+
+  return;
+
+}
+
+
+static void PRM_planner(
        double*  map,
        int x_size,
        int y_size,
@@ -52,7 +135,61 @@ static void RRT_Connectplanner(
      int* planlength)
 {
   int num = 10000;
-  int E = sqrt(0.2*numofDOFs);
+  int E = sqrt(0.5*numofDOFs);
+  vector<double> qrand(numofDOFs);
+  vector<double> qstart(numofDOFs);
+  vector<double> qgoal(numofDOFs);
+  PRMplanner graph(map,x_size,y_size,armstart_anglesV_rad,armgoal_anglesV_rad,numofDOFs,plan,planlength); // build the graph
+
+  // start at q start add the vertex 
+  for(int i=0;i<numofDOFs;i++){
+    qstart[i]=armstart_anglesV_rad[i];
+    qgoal[i] = armgoal_anglesV_rad[i];
+  } 
+  if(!IsValidArmConfiguration(armgoal_anglesV_rad, numofDOFs, map,x_size, y_size)){
+    cout<<"invalid goal configuration \n";
+    return;
+  }
+  if(!IsValidArmConfiguration(armstart_anglesV_rad, numofDOFs, map,x_size, y_size)){
+    cout<<"invalid start configuration \n";
+    return;
+  }
+  int start_index = graph.add_vertex(qstart);// add both start and goal nodes to the graph
+  int goal_index = graph.add_vertex(qgoal);
+  cout<<"started the sampling\n";
+  for(int i=0;i<num;i++){
+    
+    //if(rand75()){ // alternatively extending the trees
+    do{
+      randomSample(qrand);
+      cout<<"random sample \n";
+    }while(!IsValidArmConfiguration(qrand.data(),numofDOFs, map,x_size, y_size));
+    cout<<" checked the validity of sample";
+    int index = graph.add_vertex(qrand);
+    cout<<"added vertex \n";
+    graph.adjacentNeighbours(index, E);
+    cout<<"added adjacent neighbours\n";
+  }
+  cout<<"graph made \n";
+  graph.find_path(start_index,goal_index);
+  graph.return_plan();
+  return;
+
+}
+
+static void RRTConnect_planner(
+       double*  map,
+       int x_size,
+       int y_size,
+           double* armstart_anglesV_rad,
+           double* armgoal_anglesV_rad,
+     int numofDOFs,
+     double*** plan,
+     int* planlength)
+{
+  int num = 10000;
+  //int num_max = 100000;
+  double E = sqrt(0.2*numofDOFs);
   vector<double> qrand(numofDOFs);
   vector<double> qstart(numofDOFs);
   vector<double> qgoal(numofDOFs);
@@ -104,94 +241,22 @@ static void RRT_Connectplanner(
     }
 
   }
-  goalTree.backtrack();  // from connecting point to goal
-  startTree.backtrack(); // from connecting point to start
-  vector<vector<double>> goal_plan;
-  vector<vector<double>> start_plan;
-  goalTree.get_backtrack(goal_plan);
-  startTree.get_backtrack(start_plan);
-  startTree.returnConnect_plan(start_plan,goal_plan);
-
-  return;
+  if(treesmet){
+    goalTree.backtrack();  // from connecting point to goal
+    startTree.backtrack(); // from connecting point to start
+    vector<vector<double>> goal_plan;
+    vector<vector<double>> start_plan;
+    goalTree.get_backtrack(goal_plan);
+    startTree.get_backtrack(start_plan);
+    startTree.returnConnect_plan(start_plan,goal_plan);
+    return;
+  }else{
+    cout<<"planner couldn't reach the goal, try once more ....";
+      return;
+  }
 
 }
 
-/*
-static void RRT_Connectplanner(
-       double*  map,
-       int x_size,
-       int y_size,
-           double* armstart_anglesV_rad,
-           double* armgoal_anglesV_rad,
-     int numofDOFs,
-     double*** plan,
-     int* planlength)
-{
-  int num = 10000;
-  int E = sqrt(0.2*numofDOFs);
-  vector<double> qrand(numofDOFs);
-  vector<double> qstart(numofDOFs);
-  vector<double> qgoal(numofDOFs);
-  RRTconnectplanner startTree(map,x_size,y_size,armstart_anglesV_rad,armgoal_anglesV_rad,numofDOFs,plan,planlength);
-  RRTconnectplanner goalTree(map,x_size,y_size,armstart_anglesV_rad,armgoal_anglesV_rad,numofDOFs,plan,planlength);
-  // start at q start add the vertex 
-  for(int i=0;i<numofDOFs;i++){
-    qstart[i]=armstart_anglesV_rad[i];
-    qgoal[i] = armgoal_anglesV_rad[i];
-  } 
-  if(!IsValidArmConfiguration(armgoal_anglesV_rad, numofDOFs, map,x_size, y_size)){
-    cout<<"invalid goal configuration \n";
-    return;
-  }
-  if(!IsValidArmConfiguration(armstart_anglesV_rad, numofDOFs, map,x_size, y_size)){
-    cout<<"invalid start configuration \n";
-    return;
-  }
-  startTree.add_vertex(qstart);
-  goalTree.add_vertex(qgoal);
-  bool treesmet = false;
-  //bool goalreached = false;
-  for(int i=0;i<num;i++){
-    
-    if(i%2==0){ // alternatively extending the trees
-      randomSample(qrand);
-      startTree.extend(qrand,E);
-      cout<<"start extended \n";
-      vector<double> qnew(numofDOFs);
-      startTree.getLastAngle(qnew);// get last element
-      cout<<"now connecting from goal tree\n";
-      treesmet = goalTree.connect(qnew);// same as extend but should return if it reached the point - bool
-      if(treesmet){
-        cout<<"both the trees met from start\n";
-        break;
-      }
-    }else{
-      randomSample(qrand);
-      goalTree.extend(qrand,E);
-      cout<<"goal extended \n";
-      vector<double> qnew(numofDOFs);
-      goalTree.getLastAngle(qnew);// get last element
-      cout<<"now connecting from start tree\n";
-      treesmet = startTree.connect(qnew);// same as extend but should return if it reached the point - bool
-      if(treesmet){
-        cout<<"both the trees met from sample at goal\n";
-        break;
-      }
-    }
-
-  }
-  goalTree.backtrack();  // from connecting point to goal
-  startTree.backtrack(); // from connecting point to start
-  vector<vector<double>> goal_plan;
-  vector<vector<double>> start_plan;
-  goalTree.get_backtrack(goal_plan);
-  startTree.get_backtrack(start_plan);
-  startTree.returnConnect_plan(start_plan,goal_plan);
-
-  return;
-
-}
-/*
 static void RRT_planner(
        double*  map,
        int x_size,
@@ -202,8 +267,9 @@ static void RRT_planner(
      double*** plan,
      int* planlength)
 {
-  int num = 10000;
-  int E = sqrt(0.2*numofDOFs);
+  int num = 10;
+  int num_max = 50000;
+  double E = sqrt(0.4*numofDOFs);
   vector<double> qrand(numofDOFs);
   vector<double> qstart(numofDOFs);
   RRTplanner rrt(map,x_size,y_size,armstart_anglesV_rad,armgoal_anglesV_rad,numofDOFs,plan,planlength);
@@ -220,11 +286,14 @@ static void RRT_planner(
   rrt.add_vertex(qstart);
   bool goalpoint = false;
   bool goalreached = false;
+  int goalarea=0;
+  int goal=0;
   for(int i=0;i<num;i++){
     if(rand90() && (i+1)!=num){
       randomSample(qrand);
     }else{
       goalpoint = true;
+      goal++;
       goalSample(qrand,armgoal_anglesV_rad);
     }
     rrt.extend(qrand,E);
@@ -232,19 +301,34 @@ static void RRT_planner(
       goalpoint = false;
       goalreached = rrt.ReachedGoal(rrt.points.size()-1);
     }
+    if((i+1)==num && !goalreached){
+      if(num<num_max)
+      {
+        num += (100);
+        std::cout<<"printing out increased num "<<num<<"\n";
+      }
+    } 
     if(goalreached){
       cout<<"reached goal";
       break;
     } 
   }
 
-  rrt.backtrack();
-  rrt.return_plan();
+  std::cout<<" numofsamples"<<num<<" \n";
+  std::cout<<"goal area points "<<goalarea<<" goal points "<<goal<<"\n";
+  if(goalreached){
+    rrt.backtrack();
+    rrt.return_plan();  
+  }else{
+    std::cout<<"planner couldn't find solution  please rerun the planner.......";
+  }
+  
+
 
   return;
 
 }
-*/
+
 
 /*
 static void planner(
@@ -354,13 +438,29 @@ void mexFunction( int nlhs, mxArray *plhs[],int nrhs, const mxArray*prhs[])
     int planlength = 0;
     
     //you can may be call the corresponding planner function here
-    //if (planner_id == RRT)
-    //{
-    //    plannerRRT(map,x_size,y_size, armstart_anglesV_rad, armgoal_anglesV_rad, numofDOFs, &plan, &planlength);
-    //}
+    if (planner_id == 0)
+    {   
+      std::cout<<"Initializing RRT planner....";
+      RRT_planner(map,x_size,y_size, armstart_anglesV_rad, armgoal_anglesV_rad, numofDOFs, &plan, &planlength);
+    }else if(planner_id == 1)
+    {
+      std::cout<<"Initializing RRT Connect planner....";
+      RRTConnect_planner(map,x_size,y_size, armstart_anglesV_rad, armgoal_anglesV_rad, numofDOFs, &plan, &planlength);
+
+    }else if(planner_id == 2)
+    {
+      std::cout<<"Initializing RRT star planner....";
+      RRTStar_planner(map,x_size,y_size, armstart_anglesV_rad, armgoal_anglesV_rad, numofDOFs, &plan, &planlength);
+
+    }else if(planner_id == 3)
+    {
+      std::cout<<"Initializing PRM planner....";
+      PRM_planner(map,x_size,y_size, armstart_anglesV_rad, armgoal_anglesV_rad, numofDOFs, &plan, &planlength);
+
+    }
     
     //dummy planner which only computes interpolated path
-    planner(map,x_size,y_size, armstart_anglesV_rad, armgoal_anglesV_rad, numofDOFs, &plan, &planlength); 
+    //planner(map,x_size,y_size, armstart_anglesV_rad, armgoal_anglesV_rad, numofDOFs, &plan, &planlength); 
     
     printf("planner returned plan of length=%d\n", planlength); 
     
