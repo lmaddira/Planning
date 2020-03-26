@@ -52,11 +52,11 @@ static void RRTStar_planner(
 {
   int num = 10;
   int num_max = 10000;
-  double E = (double)sqrt(0.5*numofDOFs);
-  double gamma = 1000; 
+  //int num_max = 20;
+  double E = sqrt(0.4*numofDOFs);
+  double gamma = 3000; 
   vector<double> qrand(numofDOFs);
   vector<double> qstart(numofDOFs);
-  vector<double> qgoal(numofDOFs);
   bool goalpoint = false;
   bool goalreached = false;
   
@@ -65,7 +65,6 @@ static void RRTStar_planner(
   // start at q start add the vertex 
   for(int i=0;i<numofDOFs;i++){
     qstart[i]=armstart_anglesV_rad[i];
-    qgoal[i] = armgoal_anglesV_rad[i];
   } 
   if(!IsValidArmConfiguration(armgoal_anglesV_rad, numofDOFs, map,x_size, y_size)){
     cout<<"invalid goal configuration \n";
@@ -78,39 +77,39 @@ static void RRTStar_planner(
   int start_index = rrtstar.add_vertex(qstart);// add both start nodes to the rrtstar
   rrtstar.points[start_index].g = 0;// adding g=0 for start index
   cout<<"started the sampling\n";
-  int goalarea = 0; int goal=0;
+  int goal=0;
   for(int i=0;i<num;i++){
-    if(rand75() && (i+1)!=num){
-      randomSample(qrand);
-    }else if((i+1)!=num){
-      goalpoint = true;
-      goalarea++;
-      goalarea_Sample(qrand,armgoal_anglesV_rad);
+    if(rand90() && (i+1)!=num){
+      do{
+        randomSample(qrand);
+        cout<<"random sample \n";
+      }while(!IsValidArmConfiguration(qrand.data(),numofDOFs, map,x_size, y_size));
     }else{
       goalpoint = true;
       goal++;
       goalSample(qrand,armgoal_anglesV_rad);
     }
     rrtstar.extend_rewire(qrand,E,gamma);
-    
+    //rrtstar.extend(qrand,E);
+
     if(goalpoint){
       goalpoint = false;
       goalreached = rrtstar.ReachedGoal(rrtstar.points.size()-1);
     }
-    if((i+1)==num && !goalreached){
-      if(num<num_max)
-      {
-        num += (1000);
-        std::cout<<"printing out increased num "<<num<<"\n";
-      }
-    } 
     if(goalreached){
       cout<<"reached goal";
       break;
     }
+    if((i+1)== num){
+      if(num<num_max)
+      {
+        num +=1000;
+        std::cout<<"printing out increased num "<<num<<"\n";
+      }
+    } 
   }
   std::cout<<"printing out increased num "<<num<<"\n";
-  std::cout<<" goal area points "<<goalarea<<" goal points "<<goal<<"\n";
+  std::cout<<" goal points "<<goal<<"\n";
   if(goalreached){
     rrtstar.backtrack();
     rrtstar.return_plan();
@@ -134,7 +133,28 @@ static void PRM_planner(
      double*** plan,
      int* planlength)
 {
-  int num = 10000;
+  int num;// = 10000;
+  switch(numofDOFs)
+  {
+    case 1:
+      num = 50;
+      break;
+    case 2:
+      num = 200;
+      break;
+    case 3:
+      num = 2000;
+      break;
+    case 4:
+      num = 6000;
+      break;
+    case 5:
+      num = 10000;
+      break;
+    default:
+      num = 30000;
+      break;
+  }
   int E = sqrt(0.5*numofDOFs);
   vector<double> qrand(numofDOFs);
   vector<double> qstart(numofDOFs);
@@ -283,14 +303,17 @@ static void RRT_planner(
     cout<<"invalid start configuration \n";
     return;
   }
-  rrt.add_vertex(qstart);
+  int start_index = rrt.add_vertex(qstart);
   bool goalpoint = false;
   bool goalreached = false;
   int goalarea=0;
   int goal=0;
   for(int i=0;i<num;i++){
     if(rand90() && (i+1)!=num){
-      randomSample(qrand);
+      do{
+        randomSample(qrand);
+        cout<<"random sample \n";
+      }while(!IsValidArmConfiguration(qrand.data(),numofDOFs, map,x_size, y_size));
     }else{
       goalpoint = true;
       goal++;

@@ -38,7 +38,7 @@ using namespace std;
 #endif
 
 #define PI 3.141592654
-#define MINSTEP (PI/60)
+#define MINSTEP (PI/90)
 
 //the length of each link in the arm (should be the same as the one used in runtest.m)
 #define LINKLENGTH_CELLS 10
@@ -286,6 +286,32 @@ public:
     }
     return sqrt(dist); // euclidean distance returned 
   }
+  /*
+  double distance(int index, vector<double> &qrand){
+    double dist=0, dist2 =0;
+    double temp,temp2;
+    vector<double> point1,point2;   
+
+    for(int i=0;i<numofDOFs;i++){
+      point1.push_back(points[index].angles[i]);
+      point2.push_back(qrand[i]);
+      if(abs(points[index].angles[i] - qrand[i]) >abs((points[index].angles[i]-2*PI)-qrand[i])){
+        point1[i] = points[index].angles[i] - 2*PI ;
+      }
+      if(abs(qrand[i] - points[index].angles[i]) > abs((qrand[i]- 2*PI)-points[index].angles[i])){
+        point2[i] = qrand[i] - 2*PI ;
+      }
+      //temp  = points[index].angles[i] - qrand[i];
+      temp2 = point1[i]-point2[i];
+      dist2+=temp2*temp2;
+     // dist+=temp*temp;
+      //cout<<"Q"<<i<<points[index].angles[i]<<" "<<point1[i]<<"q"<<qrand[i]<<" "<<point2[i]<<" \n";
+    }
+    //cout<<" normal distance "<<dist<<" refined dist "<<dist2<<"\n";
+    return sqrt(dist2); // euclidean distance returned 
+  }
+  */
+    
   double distance(int index1,int index2){
     return distance(index1,points[index2].angles);
   }
@@ -305,16 +331,16 @@ public:
   }
 
   // checks the validity of the edge and returns the place where edge stops being valid
-  bool valid_edge(int index, vector<double> & qrand) {
+  int valid_edge(int index, vector<double> & qrand) {
     double dist = 0;
-    cout<<" checking validity of edge ";
+    //cout<<" In valid_edge ";
     for (int i = 0; i < numofDOFs; i++) {
       if (dist < abs(points[index].angles[i] - qrand[i])) {
         dist = abs(points[index].angles[i] - qrand[i]);
       }
     }
     int numofsamples = (int)(dist / MINSTEP);
-    cout<<" num of samples "<<numofsamples;
+   // cout<<" num of samples "<<numofsamples;
     vector<double> intermediate(numofDOFs);
 
     for (int i = 0; i < numofsamples; i++) {
@@ -323,16 +349,16 @@ public:
       }
 
       if (!IsValidArmConfiguration(intermediate.data(), numofDOFs, map, x_size, y_size)){
-        cout<<" invalid arm configuration for sample "<<numofsamples<<"\n";
-        return false;
+        //cout<<" invalid arm configuration for sample "<<numofsamples<<"\n";
+        return 0;
       } 
     }
-    cout<<" edge is valid \n";
-    return true;
+    //cout<<" edge is valid \n";
+    return 1;
   }
 
-  bool valid_edge(int index1,int index2){
-    cout<<" checking validity of edge between "<<index1<<" "<<index2<<"\n";
+  int valid_edge2(int index1,int index2){
+   // cout<<" checking validity of edge between "<<index1<<" "<<index2<<"\n";
   	return valid_edge(index1,points[index2].angles);
   }
   bool ReachedGoal(int index){
@@ -355,21 +381,21 @@ public:
     int n = points.size()-1; 
     int index = n;// getting the goal pose
     std::cout<<"index in backtrack "<<index<<"\n";
-    backtrackplan.push_back(points[index].angles);
-    print_angles(points[index].angles);
+     backtrackplan.push_back(points[index].angles);
+    // print_angles(points[index].angles);
     for(int i=0;i<n;i++){
-    	std::cout<<" in the loop of backtrack \n";
+    	//std::cout<<" in the loop of backtrack \n";
     	double distance = 0;
     	print_angles(backtrackplan.back());
 	   	for (int j = 0; j < numofDOFs; j++){
 	        if(distance < fabs(points[index].angles[j] - backtrackplan.back()[j])){
 	            distance = fabs(points[index].angles[j] - backtrackplan.back()[j]);
-	          	std::cout<<" distance "<<distance<<std::endl;
+	          	//std::cout<<" distance "<<distance<<std::endl;
             }
 	    }
-	    std::cout<<"distance "<<distance<<" ";
-	    int numofsamples = (int)(distance/(PI/40));
-	    printf("num of samples in backtrack %d \n",numofsamples);
+	    //std::cout<<"distance "<<distance<<" ";
+	    int numofsamples = (int)(distance/(PI/20));
+	    //printf("num of samples in backtrack %d \n",numofsamples);
 	    vector<double> intermediate(numofDOFs);
 	    if(numofsamples>2){
 	    	for (int k = 0; k < numofsamples; k++) {
@@ -377,19 +403,20 @@ public:
 	        		intermediate[j] = backtrackplan.back()[j] + ((double)(k) / (numofsamples - 1))*(points[index].angles[j]-backtrackplan.back()[j]);
 	      		}
 
-	      		std::cout<<" pushingback in backtrack intermidiate \n";
+	      		//std::cout<<" pushingback in backtrack intermidiate \n";
 	      		backtrackplan.push_back(intermediate);
 	      	}
 
 	    }else{
-	    	std::cout<<" pushing back the index angles \n";
+	    	//std::cout<<" pushing back the index angles \n";
 	    	backtrackplan.push_back(points[index].angles);
 	    }
 	    
-
+      //backtrackplan.push_back(points[index].angles);
 	    if(index == 0) break;
-	    std::cout<<"going to next index\n";
+	    std::cout<<"going to next index now length actual is "<<i<<"\n";
 	    index = points[index].parentID;
+
     }
     backtrackplan.push_back(points[index].angles);
     return;
@@ -440,21 +467,39 @@ class RRTplanner : public searchBasedPlanner{
 public:
   RRTplanner(double*  map,int x_size,  int y_size,  double* armstart_anglesV_rad,  double* armgoal_anglesV_rad,  int numofDOFs,  
     double*** plan,  int* planlength): searchBasedPlanner(map,x_size,y_size, armstart_anglesV_rad, armgoal_anglesV_rad,numofDOFs, plan, planlength){}
-
+/*
   RRT_result newConfig(vector<double> & qrand, int qnearID, vector<double> & qnew, double E){
     RRT_result result = trapped;
-    double dist = 0;
-
+    double max_dist = 0;
+    double dist;
+    vector<double> point1,point2;
+    for(int i=0;i<numofDOFs;i++){
+      point1.push_back(points[qnearID].angles[i]);
+      point2.push_back(qrand[i]);
+      if(abs(points[qnearID].angles[i] - qrand[i]) >abs((points[qnearID].angles[i]-2*PI)-qrand[i])){
+        point1[i] = points[qnearID].angles[i] - 2*PI ;
+      }
+      if(abs(qrand[i] - points[qnearID].angles[i]) > abs((qrand[i]- 2*PI)-points[qnearID].angles[i])){
+        point2[i] = qrand[i] - 2*PI ;
+      }
+    }
     for (int i = 0; i < numofDOFs; i++) {
-      if (dist < abs(points[qnearID].angles[i] - qrand[i])) {
-        dist = abs(points[qnearID].angles[i] - qrand[i]);
+      dist = abs(point1[i]) - abs(point2[i]);
+      if (max_dist < dist) {
+        max_dist = dist;
+        cout<<"distance "<<dist<<" max dist "<<max_dist<<"\n";
       }
     }
     int numofsamples = (int)(dist / MINSTEP);
     vector<double> intermediate(numofDOFs);
     for (int i = 0; i < numofsamples; i++) {
       for (int j = 0; j < numofDOFs; j++) {
-        intermediate[j] = points[qnearID].angles[j] + ((double)(i) / (numofsamples - 1))*(qrand[j] - points[qnearID].angles[j]);
+        //intermediate[j] = points[qnearID].angles[j] + ((double)(i) / (numofsamples - 1))*(qrand[j] - points[qnearID].angles[j]);
+        intermediate[j] = point1[j] + ((double)(i) / (numofsamples - 1))*(point2[j] - point1[j]);
+        std::cout<<" Binter"<<j<< intermediate[j]<<" ";
+        if(intermediate[j]<0) (intermediate[j] = 2*PI + intermediate[j]) ; 
+        std::cout<<" Ainter"<<j<< intermediate[j]<<" \n";
+
       }
       
       if (!IsValidArmConfiguration(intermediate.data(), numofDOFs, map, x_size, y_size)){
@@ -477,6 +522,47 @@ public:
     result = reached; 
     return result;
   }
+  */
+  RRT_result newConfig(vector<double> & qrand, int qnearID, vector<double> & qnew, double E){
+    RRT_result result = trapped;
+    double dist = 0;
+
+    for (int i = 0; i < numofDOFs; i++) {
+      if (dist < abs(points[qnearID].angles[i] - qrand[i])) {
+        dist = abs(points[qnearID].angles[i] - qrand[i]);
+      }
+    }
+    int numofsamples = (int)(dist / MINSTEP);
+    vector<double> intermediate(numofDOFs);
+    for (int i = 0; i < numofsamples; i++) {
+      for (int j = 0; j < numofDOFs; j++) {
+        intermediate[j] = points[qnearID].angles[j] + ((double)(i) / (numofsamples - 1))*(qrand[j] - points[qnearID].angles[j]);
+      }
+      if(distance(qnearID,intermediate) >E){
+        // if(i==0){
+        //   cout<<"trapped\n";
+        //   return result;
+        // }
+        cout<<" distance is more terminating with qnew\n";
+        result = advanced;
+        return result;
+      }
+      if (!IsValidArmConfiguration(intermediate.data(), numofDOFs, map, x_size, y_size)){
+        if(i==0){
+          return result;
+        }else{
+          cout<<" invalid config terminating with newq\n";
+          result = advanced;
+          return result;
+        }
+      }
+      for (int j = 0; j < numofDOFs; j++) qnew[j]=intermediate[j];
+    }
+    cout<<" valid config \n";
+    result = reached; 
+    return result;
+  }
+
 
   void extend(vector<double> &qrand,double E){
     vector<double> qnew(numofDOFs);
@@ -553,16 +639,41 @@ public:
     double*** plan,  int* planlength): RRTplanner(map,x_size,y_size, armstart_anglesV_rad, armgoal_anglesV_rad,numofDOFs, plan, planlength){}
 
 	// adds all nearest neighbours in neighbours vector // we are doing brute force for the second time//check if more efficient way is possible
-    void neighboursInRadius(int qnewID, double radius){ 
-    	double min_dist = INT8_MAX; // max number
-	    double dist;     
+    void neighboursInRadius(int qnewID, double radius,vector<int> &neighbourIds){ 
+	    double d = 0.0;  
+      bool valid;  
+      int index;  
+      // cout<<"neighboursInRadius....";
 	    for(int i=0;i<points.size();i++){
+        index = points[i].ID;
+        valid =true; 
 	    	if(i==qnewID) continue;
-        dist = distance(i,qnewID);
-        if(dist<radius){
-          if(valid_edge(i,qnewID)) // check if the edge to the new point from this neighbour is valid and then add it in neighbours
-          {
-            points[qnewID].neighbours.push_back(i);
+        d = distance(index,qnewID);
+        if(d<radius){
+          double dist = 0;
+          //cout<<" distance is less than radius "<<(double)d<<"\n";
+          for (int k = 0; k < numofDOFs; k++) {
+            if (dist < abs(points[index].angles[k] - points[qnewID].angles[k])) {
+              dist = abs(points[index].angles[k] - points[qnewID].angles[k]);
+              // cout<<"distance max between these 2 points "<<dist<<" \n";
+            }
+          }
+          int numofsamples = (int)(dist / MINSTEP);
+          vector<double> intermediate(numofDOFs);
+          for (int k = 0; k < numofsamples; k++) {
+            for (int j = 0; j < numofDOFs; j++) {
+              intermediate[j] = points[index].angles[j] + ((double)(k) / (numofsamples - 1))*(points[qnewID].angles[j] - points[index].angles[j]);
+            }
+            if(!IsValidArmConfiguration(intermediate.data(), numofDOFs, map, x_size, y_size)){
+              // cout<<"not valid";
+              valid = false;
+              break;
+            }
+            
+          }
+          if(true == valid){
+            neighbourIds.push_back(index);
+            // cout<<"pushing back in neighbourhood vertex "<<i<<" \n";
           }
         }
 	    }
@@ -573,14 +684,14 @@ public:
     }
 
     // add edge from qnew to parent(with mincost in neighbours) and updated cost of qnew
-    void add_minCost_edge(int qnewID){
+    void add_minCost_edge(int qnewID,vector<int> &neighbourIds){
     	int min_index;
     	double mincost = INT8_MAX;
-    	for(int i=0;i<points[qnewID].neighbours.size();i++){
-    		if(mincost > cost(i,qnewID)){
-    			min_index = i;
-    			mincost = cost(i,qnewID);	
-          std::cout<<"min cost now "<<mincost <<" with ID"<<i<<"\n";
+    	for(int i=0;i<neighbourIds.size();i++){
+    		if(mincost > cost(neighbourIds[i],qnewID)){
+    			min_index = neighbourIds[i];
+    			mincost = cost(neighbourIds[i],qnewID);	
+          //std::cout<<"min cost now "<<mincost <<" with ID"<<neighbourIds[i]<<"\n";
     		} 
     	}
     	add_edge(qnewID,min_index); 
@@ -589,16 +700,17 @@ public:
     	return ;
     }
     void update_edge(int qnewID,int qnearID){
-    	add_edge(qnearID,qnewID);// parent gets updated so no need to exclusivley remove the edge	
-    	points[qnearID].g = cost(qnewID,qnearID); // update cost of edge
+        add_edge(qnearID,qnewID);// parent gets updated so no need to exclusivley remove the edge	
+        points[qnearID].g = cost(qnewID,qnearID); // update cost of edge
     }
-    void rewire(int qnewID){
-    	for(int i=0;i<points[qnewID].neighbours.size();i++){
-    		if(points[i].g > cost(qnewID,i)){ // if current cost of neighbour > cost of qnew + edge from qnew to neighbour
+    void rewire(int qnewID,vector<int> &neighbourIds){
+      cout<<"trying to rewire\n";
+    	for(int i=0;i<neighbourIds.size();i++){
+    		if(points[neighbourIds[i]].g > cost(qnewID,neighbourIds[i])){ // if current cost of neighbour > cost of qnew + edge from qnew to neighbour
     			// remove prev edge and add new edge from qnew and update new cost
-    			update_edge(qnewID,i); 
-          std::cout<<"checking the parent to see if it's actually updated"<<points[i].parentID<<"\n";
-          std::cout<<"updated the edge/ rewired  of "<<i<<" to "<<qnewID<<"\n"; 			
+    			update_edge(qnewID,neighbourIds[i]); 
+          std::cout<<"checking the parent to see if it's actually updated"<<points[neighbourIds[i]].parentID<<"\n";
+          std::cout<<"updated the edge/ rewired  of "<<neighbourIds[i]<<" to "<<qnewID<<"\n"; 			
     		} 
     	}
     }
@@ -614,7 +726,7 @@ public:
       }
       double temp = gamma*log(v)/v/delta;
       double d = 1.0/numofDOFs;
-      std::cout<<"temp "<<temp<<" delta "<<delta<<" logv/v "<<log(v)/v<<"temp pow 1/dof "<<(double)pow(temp,d) <<" 1/dof "<<d<<"\n";
+      // std::cout<<"temp "<<temp<<" delta "<<delta<<" logv/v "<<log(v)/v<<"temp pow 1/dof "<<(double)pow(temp,d) <<" 1/dof "<<d<<"\n";
       double rad = (double)MIN((double)pow(temp,d),E);
       std::cout<<"radius is "<<rad<< "and E val "<<E<<"\n";
       return rad;    
@@ -622,29 +734,33 @@ public:
 
     // extend for RRT star is little different 
     void extend_rewire(vector<double> &qrand,double E,double gamma){
-	    vector<double> qnew(numofDOFs);
-	    int qnearID = nearestNeighbour(qrand);
-	    cout<<"nearest neighbour "<<qnearID<<"\n";
-	    RRT_result result = newConfig(qrand,qnearID,qnew,E); 
-	    cout<<"result "<<result<<"\n";
+      vector<double> qnew(numofDOFs);
+      int qnearID = nearestNeighbour(qrand);
+      cout<<"nearest neighbour "<<qnearID<<"\n";
+      RRT_result result = newConfig(qrand,qnearID,qnew,E);
+      cout<<"result "<<result<<"\n";
 	    if(result!=trapped){
 	      int qnewID = add_vertex(qnew); // we don't add edge here in this step in RRT star
-	      neighboursInRadius(qnewID,radius(E,gamma)); // now we have all vertex in radius which can form valid edge
-	      printf(" number of vertices in neighours %d \n",points[qnewID].neighbours.size());
-        std::cout<<"neighbours are ";
-        for(auto i:points[qnewID].neighbours){
-          std::cout<<" "<<i<<"\n";
-        }
-        if(points[qnewID].neighbours.size()==0){
-          std::cout<<"Error with radius seection..... ";
+        std::cout<<"adding vertex  as id"<<qnewID<< "\n";
+        vector<int> neighbourIds;
+	      neighboursInRadius(qnewID,radius(E,gamma),neighbourIds); // now we have all vertex in radius which can form valid edge
+	      printf(" number of vertices in neighours %d \n",neighbourIds.size());
+        // std::cout<<"neighbours are ";
+        // for(auto i:neighbourIds){
+        //   std::cout<<" "<<i<<"\n";
+        // }
+        if(neighbourIds.size()==0){
+          std::cout<<"Error with radius selection..... ";
           return;
         } 
-	      add_minCost_edge(qnewID);
-	      rewire(qnewID);
+        //add_edge(qnewID,qnearID);
+	      //add_minCost_edge(qnewID,neighbourIds);
+        add_edge(qnewID,qnearID); 
+      	points[qnewID].g = cost(qnearID,qnewID);
+	      rewire(qnewID,neighbourIds);
 	    }
 	    return;
     }
-    
 
 
 };
@@ -702,7 +818,7 @@ public:
       if(dist<radius){
         cout<<" found distance with in radius at index "<<i<<" \n";
         if(!same_tree(i,newpointID)|| points[newpointID].neighbours.size()< 8){ // max number of same tree connections can be 8 
-          if(valid_edge(i, points[newpointID].angles)){
+          if(1==valid_edge(i, points[newpointID].angles)){
             cout<<"valid edge \n";
             add_all_edges(i,newpointID);
             cout<<"added edge \n";
