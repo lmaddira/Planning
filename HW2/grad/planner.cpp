@@ -5,6 +5,7 @@
  *=================================================================*/
 #include <math.h>
 #include <iostream>
+#include <chrono>
 #include "mex.h"
 //#include "planner.h"
 #include "RRT.h"
@@ -50,11 +51,11 @@ static void RRTStar_planner(
      double*** plan,
      int* planlength)
 {
-  int num = 10;
-  int num_max = 10000;
+  int num = 10000;
+  int num_max = 50000;
   //int num_max = 20;
-  double E = sqrt(0.4*numofDOFs);
-  double gamma = 3000; 
+  double E = sqrt(0.15*numofDOFs);
+  double gamma = 6000; 
   vector<double> qrand(numofDOFs);
   vector<double> qstart(numofDOFs);
   bool goalpoint = false;
@@ -79,10 +80,10 @@ static void RRTStar_planner(
   cout<<"started the sampling\n";
   int goal=0;
   for(int i=0;i<num;i++){
-    if(rand90() && (i+1)!=num){
+    if((i+1)!=num){
       do{
         randomSample(qrand);
-        cout<<"random sample \n";
+        //cout<<"random sample \n";
       }while(!IsValidArmConfiguration(qrand.data(),numofDOFs, map,x_size, y_size));
     }else{
       goalpoint = true;
@@ -103,7 +104,7 @@ static void RRTStar_planner(
     if((i+1)== num){
       if(num<num_max)
       {
-        num +=1000;
+        num +=5000;
         std::cout<<"printing out increased num "<<num<<"\n";
       }
     } 
@@ -113,6 +114,9 @@ static void RRTStar_planner(
   if(goalreached){
     rrtstar.backtrack();
     rrtstar.return_plan();
+    auto cost = rrtstar.path_cost(rrtstar.points.size()-1);
+    cout<<" Total path cost "<<cost<<"\n";
+    cout<<" num of vertices "<<rrtstar.points.size()<<"\n";
   }else{
     std::cout<<"goal couldn't be reached .... try to replan ......\n";
   }
@@ -182,13 +186,14 @@ static void PRM_planner(
     //if(rand75()){ // alternatively extending the trees
     do{
       randomSample(qrand);
-      cout<<"random sample \n";
+      //cout<<"random sample \n";
     }while(!IsValidArmConfiguration(qrand.data(),numofDOFs, map,x_size, y_size));
-    cout<<" checked the validity of sample";
+    //cout<<" checked the validity of sample";
+    //graph.print_angles(qrand);
     int index = graph.add_vertex(qrand);
-    cout<<"added vertex \n";
+    //cout<<"added vertex"<<index<< "\n";
     graph.adjacentNeighbours(index, E);
-    cout<<"added adjacent neighbours\n";
+    //cout<<"added adjacent neighbours\n";
   }
   cout<<"graph made \n";
   graph.find_path(start_index,goal_index);
@@ -207,7 +212,7 @@ static void RRTConnect_planner(
      double*** plan,
      int* planlength)
 {
-  int num = 10000;
+  int num = 20000;
   //int num_max = 100000;
   double E = sqrt(0.2*numofDOFs);
   vector<double> qrand(numofDOFs);
@@ -231,16 +236,17 @@ static void RRTConnect_planner(
   startTree.add_vertex(qstart);
   goalTree.add_vertex(qgoal);
   bool treesmet = false;
+  int vertices = 0;
   //bool goalreached = false;
   for(int i=0;i<num;i++){
-    
+    vertices++;
     if(i%2==0){ // alternatively extending the trees
       randomSample(qrand);
       startTree.extend(qrand,E);
-      cout<<"start extended \n";
+      //cout<<"start extended \n";
       vector<double> qnew(numofDOFs);
       startTree.getLastAngle(qnew);// get last element
-      cout<<"now connecting from goal tree\n";
+     // cout<<"now connecting from goal tree\n";
       treesmet = goalTree.connect(qnew);// same as extend but should return if it reached the point - bool
       if(treesmet){
         cout<<"both the trees met from start\n";
@@ -249,10 +255,10 @@ static void RRTConnect_planner(
     }else{
       randomSample(qrand);
       goalTree.extend(qrand,E);
-      cout<<"goal extended \n";
+      //cout<<"goal extended \n";
       vector<double> qnew(numofDOFs);
       goalTree.getLastAngle(qnew);// get last element
-      cout<<"now connecting from start tree\n";
+     // cout<<"now connecting from start tree\n";
       treesmet = startTree.connect(qnew);// same as extend but should return if it reached the point - bool
       if(treesmet){
         cout<<"both the trees met from sample at goal\n";
@@ -269,6 +275,9 @@ static void RRTConnect_planner(
     goalTree.get_backtrack(goal_plan);
     startTree.get_backtrack(start_plan);
     startTree.returnConnect_plan(start_plan,goal_plan);
+    auto cost = path_cost_connect(start_plan,goal_plan);
+    cout<<" Total path cost "<<cost<<"\n";
+    cout<<" num of vertices "<<vertices<<"\n";
     return;
   }else{
     cout<<"planner couldn't reach the goal, try once more ....";
@@ -288,8 +297,8 @@ static void RRT_planner(
      int* planlength)
 {
   int num = 10;
-  int num_max = 50000;
-  double E = sqrt(0.4*numofDOFs);
+  int num_max = 30000;
+  double E = sqrt(0.3*numofDOFs);
   vector<double> qrand(numofDOFs);
   vector<double> qstart(numofDOFs);
   RRTplanner rrt(map,x_size,y_size,armstart_anglesV_rad,armgoal_anglesV_rad,numofDOFs,plan,planlength);
@@ -312,7 +321,7 @@ static void RRT_planner(
     if(rand90() && (i+1)!=num){
       do{
         randomSample(qrand);
-        cout<<"random sample \n";
+        //cout<<"random sample \n";
       }while(!IsValidArmConfiguration(qrand.data(),numofDOFs, map,x_size, y_size));
     }else{
       goalpoint = true;
@@ -328,7 +337,7 @@ static void RRT_planner(
       if(num<num_max)
       {
         num += (100);
-        std::cout<<"printing out increased num "<<num<<"\n";
+        //std::cout<<"printing out increased num "<<num<<"\n";
       }
     } 
     if(goalreached){
@@ -342,12 +351,12 @@ static void RRT_planner(
   if(goalreached){
     rrt.backtrack();
     rrt.return_plan();  
+    auto cost = rrt.path_cost(rrt.points.size()-1);
+    cout<<" Total path cost "<<cost<<"\n";
+    cout<<" num of vertices "<<rrt.points.size()<<"\n";
   }else{
     std::cout<<"planner couldn't find solution  please rerun the planner.......";
   }
-  
-
-
   return;
 
 }
@@ -459,7 +468,7 @@ void mexFunction( int nlhs, mxArray *plhs[],int nrhs, const mxArray*prhs[])
     //call the planner
     double** plan = NULL;
     int planlength = 0;
-    
+    auto start = std::chrono::high_resolution_clock::now();
     //you can may be call the corresponding planner function here
     if (planner_id == 0)
     {   
@@ -481,6 +490,11 @@ void mexFunction( int nlhs, mxArray *plhs[],int nrhs, const mxArray*prhs[])
       PRM_planner(map,x_size,y_size, armstart_anglesV_rad, armgoal_anglesV_rad, numofDOFs, &plan, &planlength);
 
     }
+    auto stop = std::chrono::high_resolution_clock::now(); 
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(stop - start); 
+  
+    cout << "Time taken by function: "
+         << duration.count() << " milliseconds" << endl;
     
     //dummy planner which only computes interpolated path
     //planner(map,x_size,y_size, armstart_anglesV_rad, armgoal_anglesV_rad, numofDOFs, &plan, &planlength); 

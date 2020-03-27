@@ -228,8 +228,6 @@ struct Node{
 struct Compare { 
     bool operator()(Node const& N1, Node const& N2) 
     { 
-        // return "true" if "p1" is ordered  
-        // before "p2", for example: 
         return N1.f > N2.f; 
     } 
 };
@@ -265,7 +263,7 @@ public:
     int size = points.size(); // take the size of the current node to add next node 
     points.push_back(Node());
     points[size].angles = qnew;
-    print_angles(qnew);
+    //print_angles(qnew);
     points[size].ID = size;
     return size;
   }
@@ -276,7 +274,6 @@ public:
     return ;
   }
   
-
   double distance(int index, vector<double> &qrand){
     double dist=0;
     double temp;
@@ -372,7 +369,8 @@ public:
 
   void print_angles(vector<double> &angles){
   	for(int i=0;i<numofDOFs;i++){
-  		std::cout<<" Q"<<i<<" "<<angles[i];
+  		//std::cout<<" Q"<<i<<" "<<angles[i];
+      std::cout<<angles[i]<<" ";
   	}
   	std::cout<<"\n";
   }
@@ -380,13 +378,13 @@ public:
   void backtrack(){
     int n = points.size()-1; 
     int index = n;// getting the goal pose
-    std::cout<<"index in backtrack "<<index<<"\n";
+    //std::cout<<"index in backtrack "<<index<<"\n";
      backtrackplan.push_back(points[index].angles);
     // print_angles(points[index].angles);
     for(int i=0;i<n;i++){
     	//std::cout<<" in the loop of backtrack \n";
     	double distance = 0;
-    	print_angles(backtrackplan.back());
+    	//print_angles(backtrackplan.back());
 	   	for (int j = 0; j < numofDOFs; j++){
 	        if(distance < fabs(points[index].angles[j] - backtrackplan.back()[j])){
 	            distance = fabs(points[index].angles[j] - backtrackplan.back()[j]);
@@ -414,7 +412,7 @@ public:
 	    
       //backtrackplan.push_back(points[index].angles);
 	    if(index == 0) break;
-	    std::cout<<"going to next index now length actual is "<<i<<"\n";
+	    //std::cout<<"going to next index now length actual is "<<i<<"\n";
 	    index = points[index].parentID;
 
     }
@@ -423,9 +421,45 @@ public:
   }
   void get_backtrack(vector<vector<double>> &newplan){
     int n = backtrackplan.size();
-    for(int i=0;i<n;i++){
-      newplan.push_back(backtrackplan[i]);
+    newplan.push_back(backtrackplan[0]);
+    for(int i=0;i< n-1;i++){
+      double distance = 0;
+	   	for (int j = 0; j < numofDOFs; j++){
+	        if(distance < fabs(backtrackplan[i][j]- backtrackplan[i+1][j])){
+	            distance = fabs(backtrackplan[i][j]- backtrackplan[i+1][j]);
+	          	//std::cout<<" distance "<<distance<<std::endl;
+            }
+	    }
+	    //std::cout<<"distance "<<distance<<" ";
+	    int numofsamples = (int)(distance/(PI/20));
+	    //printf("num of samples in backtrack %d \n",numofsamples);
+	    vector<double> intermediate(numofDOFs);
+	    if(numofsamples>2){
+	    	for (int k = 0; k < numofsamples; k++) {
+	      		for (int j = 0; j < numofDOFs; j++) {
+	        		intermediate[j] = backtrackplan[i][j] + ((double)(k) / (numofsamples - 1))*(backtrackplan[i+1][j]-backtrackplan[i][j]);
+	      		}
+
+	      		//std::cout<<" pushingback in backtrack intermidiate \n";
+	      		newplan.push_back(intermediate);
+	      	}
+
+	    }else{
+	    	//std::cout<<" pushing back the index angles \n";
+	    	newplan.push_back(backtrackplan[i]);
+	    }
+      //newplan.push_back(backtrackplan[i]);
     }
+  }
+// intended to use it only once the path is found pass the index of the goal to it so that cost of the goal will be found
+  double path_cost(int index){ // pass the node to which we want to find cost 
+    if(index == 0){
+      return(points[index].g = 0.0);
+    }  // always assume the start index is 0
+    int parent = points[index].parentID;
+    //cout<<" cal cost of index"<<index<<"\n";
+    return (points[index].g = distance(index,parent) + path_cost(parent));
+    //return (distance(backtrackplan[index],backtrackplan[index-1])+path_cost(index-1))
   }
   void return_plan() {
     *plan = NULL;
@@ -437,9 +471,9 @@ public:
       (*plan)[i] = (double*)malloc(numofDOFs * sizeof(double));
       for (int j = 0; j < numofDOFs; j++) {
         (*plan)[i][j] = backtrackplan[total-1-i][j];
-        std::cout<<" plan "<< backtrackplan[total-1-i][j];
+        //std::cout<<" plan "<< backtrackplan[total-1-i][j];
       }
-      std::cout<<"\n";
+      //std::cout<<"\n";
     }
     *planlength = total;
     cout<<"plan length "<<total;
@@ -539,11 +573,7 @@ public:
         intermediate[j] = points[qnearID].angles[j] + ((double)(i) / (numofsamples - 1))*(qrand[j] - points[qnearID].angles[j]);
       }
       if(distance(qnearID,intermediate) >E){
-        // if(i==0){
-        //   cout<<"trapped\n";
-        //   return result;
-        // }
-        cout<<" distance is more terminating with qnew\n";
+        //cout<<" distance is more terminating with qnew\n";
         result = advanced;
         return result;
       }
@@ -551,14 +581,14 @@ public:
         if(i==0){
           return result;
         }else{
-          cout<<" invalid config terminating with newq\n";
+          //cout<<" invalid config terminating with newq\n";
           result = advanced;
           return result;
         }
       }
       for (int j = 0; j < numofDOFs; j++) qnew[j]=intermediate[j];
     }
-    cout<<" valid config \n";
+    //cout<<" valid config \n";
     result = reached; 
     return result;
   }
@@ -567,12 +597,12 @@ public:
   void extend(vector<double> &qrand,double E){
     vector<double> qnew(numofDOFs);
     int qnearID = nearestNeighbour(qrand);
-    cout<<"nearest neighbour "<<qnearID<<"\n";
+    //cout<<"nearest neighbour "<<qnearID<<"\n";
     RRT_result result = newConfig(qrand,qnearID,qnew,E);
-    cout<<"result "<<result<<"\n";
+    //cout<<"result "<<result<<"\n";
     if(result!=trapped){
     	int childID = add_vertex(qnew);
-    	std::cout<<"adding vertex  as id"<<childID<< "\n";
+    	//std::cout<<"adding vertex  as id"<<childID<< "\n";
       add_edge(childID,qnearID);
     }
     return;
@@ -588,11 +618,12 @@ public:
   bool connect(vector<double> &qrand){ // returns if it met the point qrand (same as extend)
     vector<double> qnew(numofDOFs);
     int qnearID = nearestNeighbour(qrand);
-    cout<<"nearest neighbour "<<qnearID<<"\n";
+    //cout<<"nearest neighbour "<<qnearID<<"\n";
     RRT_result result = newConfig(qrand,qnearID,qnew,INT8_MAX);
-    cout<<"result "<<result<<"\n";
+    //cout<<"result "<<result<<"\n";
     if(result!=trapped){
       int childID = add_vertex(qnew);
+      //std::cout<<"adding vertex  as id"<<childID<< "\n";
       add_edge(childID,qnearID);
       if(result==reached){ 
         return true;
@@ -603,27 +634,29 @@ public:
   void returnConnect_plan(vector<vector<double>> &startplan,vector<vector<double>> &goalplan) {
     *plan = NULL;
     *planlength = 0;
-
+    // start plan is from point tree met to start 
+    // goal plan is from point tree met to goal
     int start_total = startplan.size();
     int goal_total = goalplan.size();
-    cout<<"start plan length "<<start_total<<" goal plan length "<<goal_total<<"\n";
+    //cout<<"start plan length "<<start_total<<" goal plan length "<<goal_total<<"\n";
     int total = start_total+goal_total;
     *plan = (double**)malloc(total * sizeof(double*));
     for (int i = 0; i < start_total; i++) {
-      cout<<"\nplan "<<i<<" ";
+      //cout<<"\nplan "<<i<<" ";
       (*plan)[i] = (double*)malloc(numofDOFs * sizeof(double));
       for (int j = 0; j < numofDOFs; j++) {
         (*plan)[i][j] = startplan[start_total-1-i][j];
-        cout<<" Q"<<j<<" "<<startplan[start_total-1-i][j];
+        //cout<<" Q"<<j<<" "<<startplan[start_total-1-i][j];
       }
     }
-    cout<<"pushing the goal tree now\n";
+    //cout<<"pushing the goal tree now\n";
+    
     for (int i = start_total; i < total; i++) {
-      cout<<"\nplan "<<i<<" ";
+     // cout<<"\nplan "<<i<<" ";
       (*plan)[i] = (double*)malloc(numofDOFs * sizeof(double));
       for (int j = 0; j < numofDOFs; j++) {
         (*plan)[i][j] = goalplan[i-start_total][j];
-        cout<<" Q"<<j<<" "<<goalplan[i-start_total][j];
+       // cout<<" Q"<<j<<" "<<goalplan[i-start_total][j];
       }
     }
     *planlength = total;
@@ -696,7 +729,7 @@ public:
     	}
     	add_edge(qnewID,min_index); 
     	points[qnewID].g = mincost;
-      std::cout<<"cost of vertex "<<qnewID<<" is "<<points[qnewID].g<<"\n";
+      //std::cout<<"cost of vertex "<<qnewID<<" is "<<points[qnewID].g<<"\n";
     	return ;
     }
     void update_edge(int qnewID,int qnearID){
@@ -704,13 +737,14 @@ public:
         points[qnearID].g = cost(qnewID,qnearID); // update cost of edge
     }
     void rewire(int qnewID,vector<int> &neighbourIds){
-      cout<<"trying to rewire\n";
+      //cout<<"trying to rewire\n";
     	for(int i=0;i<neighbourIds.size();i++){
     		if(points[neighbourIds[i]].g > cost(qnewID,neighbourIds[i])){ // if current cost of neighbour > cost of qnew + edge from qnew to neighbour
     			// remove prev edge and add new edge from qnew and update new cost
-    			update_edge(qnewID,neighbourIds[i]); 
-          std::cout<<"checking the parent to see if it's actually updated"<<points[neighbourIds[i]].parentID<<"\n";
-          std::cout<<"updated the edge/ rewired  of "<<neighbourIds[i]<<" to "<<qnewID<<"\n"; 			
+          if(valid_edge(qnewID,points[neighbourIds[i]].angles))
+    			  update_edge(qnewID,neighbourIds[i]); 
+          // std::cout<<"checking the parent to see if it's actually updated"<<points[neighbourIds[i]].parentID<<"\n";
+          // std::cout<<"updated the edge/ rewired  of "<<neighbourIds[i]<<" to "<<qnewID<<"\n"; 			
     		} 
     	}
     }
@@ -728,7 +762,7 @@ public:
       double d = 1.0/numofDOFs;
       // std::cout<<"temp "<<temp<<" delta "<<delta<<" logv/v "<<log(v)/v<<"temp pow 1/dof "<<(double)pow(temp,d) <<" 1/dof "<<d<<"\n";
       double rad = (double)MIN((double)pow(temp,d),E);
-      std::cout<<"radius is "<<rad<< "and E val "<<E<<"\n";
+      //std::cout<<"radius is "<<rad<< "and E val "<<E<<"\n";
       return rad;    
     }
 
@@ -736,15 +770,15 @@ public:
     void extend_rewire(vector<double> &qrand,double E,double gamma){
       vector<double> qnew(numofDOFs);
       int qnearID = nearestNeighbour(qrand);
-      cout<<"nearest neighbour "<<qnearID<<"\n";
+      //cout<<"nearest neighbour "<<qnearID<<"\n";
       RRT_result result = newConfig(qrand,qnearID,qnew,E);
-      cout<<"result "<<result<<"\n";
+      //cout<<"result "<<result<<"\n";
 	    if(result!=trapped){
 	      int qnewID = add_vertex(qnew); // we don't add edge here in this step in RRT star
-        std::cout<<"adding vertex  as id"<<qnewID<< "\n";
+        //std::cout<<"adding vertex  as id"<<qnewID<< "\n";
         vector<int> neighbourIds;
 	      neighboursInRadius(qnewID,radius(E,gamma),neighbourIds); // now we have all vertex in radius which can form valid edge
-	      printf(" number of vertices in neighours %d \n",neighbourIds.size());
+	      //printf(" number of vertices in neighours %d \n",neighbourIds.size());
         // std::cout<<"neighbours are ";
         // for(auto i:neighbourIds){
         //   std::cout<<" "<<i<<"\n";
@@ -777,7 +811,7 @@ public:
     points[size].ID = size;
     points[size].g = INT8_MAX;
     points[size].parentID = size;
-    cout<<" parent being initialised in add_vertex "<< points[size].parentID<<"\n";
+    //cout<<" added_vertex "<< points[size].ID<<"\n";
     return size;
   }
   // gives the tree_root parent index 
@@ -791,7 +825,7 @@ public:
   bool same_tree(int index1,int index2){
     int a1 = tree_root(index1);
     int a2 = tree_root(index2);
-    cout<<" tree of old point "<<index1<< " is "<<a1<<" and "<<index2<<" "<<a2<<"\n";
+    //cout<<" tree of old point "<<index1<< " is "<<a1<<" and "<<index2<<" "<<a2<<"\n";
     int check =0;
     if(a1==a2){
       check++;
@@ -805,7 +839,7 @@ public:
     points[child].neighbours.push_back(parent);
     points[parent].neighbours.push_back(child);
     points[tree_root(parent)].parentID = tree_root(child);
-    cout<<" tree is "<<tree_root(parent)<<"\n";
+    //cout<<" tree is "<<tree_root(parent)<<"\n";
     return;
 
   }
@@ -816,12 +850,12 @@ public:
       if(i==newpointID) continue;
       dist = distance(i,newpointID); // if a point is found in the radius then add the point edge both sides
       if(dist<radius){
-        cout<<" found distance with in radius at index "<<i<<" \n";
+        //cout<<" found distance with in radius at index "<<i<<" \n";
         if(!same_tree(i,newpointID)|| points[newpointID].neighbours.size()< 8){ // max number of same tree connections can be 8 
-          if(1==valid_edge(i, points[newpointID].angles)){
-            cout<<"valid edge \n";
+          if(valid_edge(i, points[newpointID].angles)){
+            //cout<<"valid edge \n";
             add_all_edges(i,newpointID);
-            cout<<"added edge \n";
+            //cout<<"added edge \n";
           }
         }
       } 
@@ -831,21 +865,21 @@ public:
   
 
   void find_path(int startindex,int goalindex){
-    //Do backward Astar search with the graph build by random samples 
+    //Do forward Astar search with the graph build by random samples 
     vector<Node> OPEN;
     unordered_map<int, double> CLOSED;
     int weight = 10; // or u can get this from main function
     // intiate gval, h and f val for start
-    cout<<"started backward A star planning.....\n";
+    cout<<"started forward weighted A star planning.....\n";
     OPEN.clear();
-    cout<<"OPEN size at start "<<OPEN.size()<<"\n";
+   // cout<<"OPEN size at start "<<OPEN.size()<<"\n";
     points[startindex].g = 0;
     points[startindex].f = points[startindex].g + 10*distance(startindex,goalindex); // f = g+h;
     OPEN.push_back(points[startindex]); // pushing back a node
-    cout<<" pushed back goal point and its index is "<<startindex<<"\n";
+    //cout<<" pushed back start point and its index is "<<startindex<<"\n";
 
     int n=0;
-    cout<<"checking if start has any neighbours "<<points[goalindex].neighbours.size()<<"\n";
+    //cout<<"checking if start has any neighbours "<<points[goalindex].neighbours.size()<<"\n";
     while(OPEN.size()>0)
     {
       n++;
@@ -855,7 +889,7 @@ public:
       // for(int i=0;i<OPEN.size();i++){
       //   cout<<OPEN[i].ID<<" and f value is "<<OPEN[i].f<<" \n";
       // }
-      cout<<"\n";
+      //cout<<"\n";
       Node min_node = OPEN.front();
       pop_heap(OPEN.begin(),OPEN.end(),Compare());
       OPEN.pop_back();
@@ -865,8 +899,8 @@ public:
       // }
       double min_gval = min_node.g;
       int min_index = min_node.ID; 
-      cout<<" min_index..."<<min_index<<"\n"; 
-      cout<<"no of neighbours for minnode is "<<min_node.neighbours.size()<<"\n";
+      // cout<<" min_index..."<<min_index<<"\n"; 
+      // cout<<"no of neighbours for minnode is "<<min_node.neighbours.size()<<"\n";
       if(min_index == goalindex){
         CLOSED.insert(make_pair(min_index,min_gval));
         cout<<" goal point expanded by A star algorithm\n";
@@ -889,7 +923,7 @@ public:
               if(OPEN[i].g > g_val){
                 OPEN[i].g = g_val;
                 OPEN[i].f = f_val;
-                cout<<"updating f_val\n";
+                //cout<<"updating f_val\n";
               }
               count++;
               break;
@@ -899,32 +933,31 @@ public:
             points[index].g = g_val;
             points[index].f = f_val;
             OPEN.push_back(points[index]);
-            cout<<"adding new point to OPEN \n";
+            //cout<<"adding new point to OPEN \n";
           }
         }    
       }
     }
     auto track = goalindex;
     int best_index;
-    cout<<" OPEN loop expanded goal and size is "<<OPEN.size()<<" \n";
-    cout<<" closed loop size before backtrack  "<<CLOSED.size()<<" \n";
-    cout<<"all points in closed loop ";
-    for(auto &i:CLOSED){
-      cout<<"index "<<i.first<<" g value "<<i.second<<" \n";
-    }
+    // cout<<" OPEN loop expanded goal and size is "<<OPEN.size()<<" \n";
+    // cout<<" closed loop size before backtrack  "<<CLOSED.size()<<" \n";
+    //cout<<"all points in closed loop ";
+    // for(auto &i:CLOSED){
+    //   cout<<"index "<<i.first<<" g value "<<i.second<<" \n";
+    // }
     if(CLOSED.find(goalindex)==CLOSED.end()){
       cout<<" goal not found in the given sample set.... planning failed\n";
       return;
     }
-
     while(track!=startindex && CLOSED.size()>0){
       double check = INT8_MAX;
       CLOSED.erase(track);
       backtrackplan.push_back(points[track].angles);
       for(auto index : points[track].neighbours){
-        cout<<"checking current neighbour "<<index<<" ";
+        //cout<<"checking current neighbour "<<index<<" ";
         if(CLOSED.find(index)!=CLOSED.end()){
-          cout<<"\n found this neighbour in closed "<<index<<"\n";
+          //cout<<"\n found this neighbour in closed "<<index<<"\n";
           auto cost = CLOSED[index]+ distance(index,track);
           if(check > cost){
             check = cost;
@@ -933,15 +966,25 @@ public:
         }
       }
       track = best_index;
-      cout<<"best index "<<track<<"\n";
+      //cout<<"best index "<<track<<"\n";
     }
     backtrackplan.push_back(points[track].angles);
     cout<<"planning done\n";
+    cout<<"cost of the plan "<<points[goalindex].g<<"\n";
     return;
   }
 
 
 }; 
+double distance(vector<double> &qnew, vector<double> &qrand){
+  double dist=0;
+  double temp;
+  for(int i=0;i<qnew.size();i++){
+    temp  = qnew[i] - qrand[i];
+    dist+=temp*temp;
+  }
+  return sqrt(dist); // euclidean distance returned 
+}
 
 void randomSample(vector<double> & qrand){
   //srand((int)time(nullptr));
@@ -953,7 +996,7 @@ void randomSample(vector<double> & qrand){
     // else
     // {
     qrand[i] = fmod(rand(),(2*PI)); 
-    std::cout<< " Q"<<i<<" "<<qrand[i]<< " ";
+    //std::cout<< " Q"<<i<<" "<<qrand[i]<< " ";
     // }
   }
   //std::cout<<"\n";
@@ -963,10 +1006,22 @@ void goalSample(vector<double> &qrand,double* armgoal_anglesV_rad){
   // goal as sample
   for(int i = 0; i<qrand.size();i++){
     qrand[i] = armgoal_anglesV_rad[i]; 
-    std::cout<< "goal  Q"<<i<<" "<<qrand[i]<< " ";
+    //std::cout<< "goal  Q"<<i<<" "<<qrand[i]<< " ";
   }
   
   return;
+}
+double path_cost_connect(vector<vector<double>> &startplan,vector<vector<double>> &goalplan){
+  double cost=0;
+  for(int i=0;i<startplan.size()-1;i++){
+    cost += distance(startplan[i],startplan[i+1]); 
+  }
+  //cout<<"cost after start tree "<<cost;
+  for(int i=0;i<goalplan.size()-1;i++){
+    cost += distance(goalplan[i],goalplan[i+1]); 
+  }
+  //cout<<" cost after goal tree "<<cost;
+  return cost;
 }
 
 // double delta_val(int numofDOFs){
@@ -1013,7 +1068,7 @@ void goalarea_Sample(vector<double> &qrand,double* armgoal_anglesV_rad){
     }else{
       qrand[i] = max(0.0, armgoal_anglesV_rad[i] - (fmod(rand(),PI/60)));
     }
-    std::cout<< "goal  Q"<<i<<" "<<qrand[i]<< " ";
+    //std::cout<< "goal  Q"<<i<<" "<<qrand[i]<< " ";
   }
   
   return;
