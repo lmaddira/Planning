@@ -1,0 +1,43 @@
+Symbols: A,B,W,F
+Initial conditions: Quad_hover_at(B), Robot_at(A), Fire_at(F), Water_at(W), Quad_battery_full(q), Quad_water_empty(q)
+Goal conditions: Extinguishonce(F)
+
+Actions:
+        Charge_at(a)
+        Preconditions: Quad_battery_empty(q), Quad_on_robot(a)
+        Effects: Quad_battery_full(q), !Quad_battery_empty(q)
+
+        Fill_Water_at(a)
+        Preconditions: Quad_water_empty(q), Quad_on_robot(a), Water_at(a)
+        Effects: Quad_water_full(q), !Quad_water_empty(q)
+
+        Move_only_Robot(a,b)
+        Preconditions: Robot_at(a)
+        Effects: Robot_at(b), !Robot_at(a)
+
+        Move_With_Quad(a,b)
+        Preconditions: Quad_on_robot(a)
+        Effects: !Quad_on_robot(a), Quad_on_robot(b)
+
+        Quad_Land_on_robot_at(a)
+        Preconditions: Robot_at(a), Quad_hover_at(a)
+        Effects: !Quad_hover_at(a), Quad_on_robot(a), !Robot_at(a)
+
+        Quad_start_hover_at(a)
+        Preconditions: Quad_on_robot(a), Quad_battery_full(q)
+        Effects: Quad_hover_at(a), !Quad_on_robot(a), Robot_at(a)
+
+        Extinguish_first_time(a)
+        Preconditions: Fire(a), Quad_hover_at(a),Quad_battery_full(q), Quad_water_full(q)
+        Effects:  Extinguishonce(a), Quad_battery_empty(q), !Quad_battery_full(q), Quad_water_empty(q), Quad_water_full(q)
+
+        Extinguish_second_time(a)
+        Preconditions: Fire(a), Quad_hover_at(a),Quad_battery_full(q), Quad_water_full(q), Extinguishonce(a)
+        Effects: Quad_battery_empty(q), !Quad_battery_full(q), Quad_water_empty(q), Quad_water_full(q), ExtinguishTwice(a), !Extinguishonce(a)
+
+        Extinguish_Third_time(a)
+        Preconditions: Fire(a), Quad_hover_at(a),Quad_battery_full(q), Quad_water_full(q), ExtinguishTwice(a)
+        Effects: Quad_battery_empty(q), !Quad_battery_full(q), Quad_water_empty(q), Quad_water_full(q), ExtinguishThrice(a), !ExtinguishTwice(a)
+
+
+

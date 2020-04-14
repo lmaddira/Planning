@@ -1,0 +1,12 @@
+Symbols: B0,B1,B2,T0,Table
+Initial conditions: On(B1,B0), On(B0,Table), On(B2,Table), On(T0,B1), Block(B0), Block(B1), Block(B2), Triangle(T0), Clear(T0), Clear(B2), Clear(Table), NotTable(T0), NotTable(B0), NotTable(B1), NotTable(B2)
+Goal conditions: On(B1,B2), On(T0,B1), On(B0,Table), On(B2,B0)
+
+Actions:
+        MoveToTable(b,x)
+        Preconditions: On(b,x), Clear(b), NotTable(b), Block(x), NotTable(x)
+        Effects: On(b,Table), Clear(x), !On(b,x)
+
+        Move(b,x,y)
+        Preconditions: On(b,x), Clear(b), Clear(y), NotTable(b), Block(y), NotTable(y)
+        Effects: On(b,y), Clear(x), !On(b,x), !Clear(y)
