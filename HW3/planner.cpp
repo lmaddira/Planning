@@ -20,7 +20,7 @@ public:
     } 
 };
 
-bool if_included(unordered_set<State,State_hash,State_comparator> &CLOSED,State &state)
+bool if_included(vector<State> &CLOSED,State &state)
 {
     for(auto s : CLOSED){
         auto lhs = s.get_state_conditions();
@@ -30,7 +30,7 @@ bool if_included(unordered_set<State,State_hash,State_comparator> &CLOSED,State 
     }
     return false;
 }
-State state_in_closed(unordered_set<State,State_hash,State_comparator> &CLOSED,State &state)
+State state_in_closed(vector<State> &CLOSED,State &state)
 {
     for(auto s : CLOSED){
         auto lhs = s.get_state_conditions();
@@ -38,19 +38,22 @@ State state_in_closed(unordered_set<State,State_hash,State_comparator> &CLOSED,S
         if(lhs == rhs)
             return s; 
     }
+    cout<<"check state existance \n";
+    throw;
 }
-void remove_state(unordered_set<State,State_hash,State_comparator> &CLOSED,State best)
+void remove_state(vector<State> &CLOSED,State best)
 {
-    vector<State> temp;
-    for(auto state : CLOSED)
+    int i;
+    for(i =0;i<CLOSED.size();i++)
     {
-        if(state == best) continue;
-        temp.push_back(state);
+        if(CLOSED[i] == best)
+        break;
     }
-    CLOSED.clear();
-    for(auto state : temp){
-        CLOSED.insert(state);
-    }
+    if(i!=CLOSED.size())
+        CLOSED.erase(CLOSED.begin()+i);
+    else
+        cout<<"check state existance \n";   
+        
     return;
 }
 bool action_from_to(State &from_state,State &to_state,Env* env,GroundedAction &temp_action)
@@ -91,7 +94,7 @@ list<GroundedAction> planner(Env* env)
     auto FC = env->get_goal_conditions();
     State goal_state(FC);//intiate it as goal
 
-    while(i<40)//(OPEN.size() !=0)
+    while(OPEN.size() !=0)
     {
         i++;
         std::make_heap(OPEN.begin(),OPEN.end(),myComparator());
@@ -113,13 +116,13 @@ list<GroundedAction> planner(Env* env)
             goal_state.update_prev_conditions(min_state.prev_conditions);
             break;
         }  // this means reached goal
-        CLOSED.insert(min_state);
+        CLOSED.push_back(min_state);
         auto successors = env->get_successors(min_state); 
         std::cout<<"no of successors"<<successors.size()<<std::endl;
         for(auto succ_state: successors)
         {
-            // cout<<"now looking at ";
-            // succ_state.print();
+            cout<<"now looking at ";
+            succ_state.print();
             if(!if_included(CLOSED,succ_state))// if not in closed already
             {
                 if(succ_state.g > min_state.g + 1)
@@ -143,11 +146,7 @@ list<GroundedAction> planner(Env* env)
                         {
                             OPEN[i].g = succ_state.g;
                             OPEN[i].f = succ_state.f;
-                            // auto temp = succ_state.get_state_conditions();
-                            // OPEN[i].update_prev_conditions(temp);
                         }
-                        // cout<<"updated ";
-                        // succ_state.print();
                         count++;
                         break;
                     }
@@ -158,13 +157,16 @@ list<GroundedAction> planner(Env* env)
                 }
             }else{
                 cout<<"in closed already \n";
-                if(succ_state.g > min_state.g + 1)
+                State Cstate = state_in_closed(CLOSED,succ_state);
+                if(Cstate.g > min_state.g + 1)
                 {
+                    remove_state(CLOSED,Cstate);
                     succ_state.g = min_state.g + 1; // each transision is of same cost 
                     auto temp = min_state.get_state_conditions();
                     succ_state.h = env->heuristics(succ_state.get_state_conditions());
                     auto f_value = f_val(succ_state,weight);
                     succ_state.update_prev_conditions(temp);
+                    CLOSED.push_back(succ_state);
                 }
 
             }
@@ -184,6 +186,7 @@ list<GroundedAction> planner(Env* env)
     //     cout<< "f val of state "<< state.f<<" g val "<<state.g<<" h val "<< state.h <<endl;
     // }
     // blocks world example
+    cout<<"size of OPEN outside the open loop "<<OPEN.size()<<"\n";
     list<GroundedAction> actions;
     auto track = goal_state.get_state_conditions();
     auto best_ac = goal_state.get_prev_action();
@@ -210,22 +213,28 @@ list<GroundedAction> planner(Env* env)
             if(action_from_to(from_state,to_state,env,temp_action))
             {
                 actions.push_front(temp_action);
-                cout<<"action found "<<temp_action<<endl;
+                // cout<<"action found "<<temp_action<<endl;
                 if(if_included(CLOSED,from_state)){
                     to_state = state_in_closed(CLOSED,from_state);
+                    cout<<"to state ";
+                    to_state.print();
                     if(to_state.state_conditions == start_state.state_conditions)
                     {
                         cout<<"reached start \n";
                         return actions;
                     } 
-                    cout<<"to state ";
-                    to_state.print();
+                    // if(to_state.prev_conditions == NULL)
+                    // {
+                    //     cout<<"something worng ... check\n";
+                    // }
                     from_state.update_state_conditions(to_state.prev_conditions);
+                    // OPEN.erase(OPEN.begin()+i);
                     cout<<"from state ";
                     from_state.print();
-                    OPEN.erase(OPEN.begin()+i);
+                    
+                    
                 }else{
-                    cout<<"check that the action is not included in closed \n";
+                    cout<<"check that the from state is not included in closed \n";
                 }
             }else{
                 cout<<"something is wrong please check \n";

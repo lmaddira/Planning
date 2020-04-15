@@ -803,12 +803,13 @@ public:
         for( Action ac : this->actions)
         {
             vector<GroundedAction>  gactions  = valid_set_actions(state,ac);
-            cout<<" got the g actions now getting succ \n";
+            // cout<<" got the g actions now getting succ \n";
             for( GroundedAction each_action : gactions)
             {   
                 Succ.push_back(next_state(state,each_action));
             }
-            cout<<" for action name "<<ac.get_name()<<" no of incre succ states "<<Succ.size()<<endl;
+            if(ac.get_name() == "Extinguish_first_time")
+                cout<<" for action name "<<ac.get_name()<<" no of incre succ states "<<Succ.size()<<endl;
         }
         return Succ;
     }
