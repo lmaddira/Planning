@@ -10,6 +10,7 @@
 #include <unordered_map>
 #include <algorithm>
 #include <stdexcept>
+#include <omp.h>
 
 #define SYMBOLS 0
 #define INITIAL 1
@@ -329,7 +330,8 @@ class GroundedAction
 private:
     string name;
     list<string> arg_values;
-    // unordered_set<GroundedCondition, GroundedConditionHasher, GroundedConditionComparator> gPreconditions;
+    unordered_set<Condition, ConditionHasher, ConditionComparator> gEffects;
+    unordered_set<GroundedCondition, GroundedConditionHasher, GroundedConditionComparator> gPreconditions;
     // unordered_set<GroundedCondition, GroundedConditionHasher, GroundedConditionComparator> gEffects;
 
 public:
@@ -341,7 +343,69 @@ public:
             this->arg_values.push_back(ar);
         }
     }
+    void update_preconditions(unordered_map<string,string> mapping_args,Action &ac)
+    {
+        for(Condition precon  : ac.get_preconditions())
+        {
+            string pred = precon.get_predicate();
+            list<string> arg_val = precon.get_args();
+            list<string> arg_check;
+            while(arg_val.size()!=0)
+            {
+                auto temp = arg_val.front();
+                if(mapping_args.find(temp) != mapping_args.end())
+                {
+                    arg_check.push_back(mapping_args.find(temp)->second);
+                }else
+                {
+                   arg_check.push_back(temp); 
+                }               
+                arg_val.pop_front();
+            }
+            //cout<<"checking for condition ";
+            GroundedCondition precondition(pred,arg_check,true);
+            //cout<< precondition<<"\n";
+            this->gPreconditions.insert(precondition);
+        }
 
+    }
+    unordered_set<GroundedCondition, GroundedConditionHasher, GroundedConditionComparator> get_preconditions()
+    {
+        return this->gPreconditions;
+    }
+    void update_effects(unordered_map<string,string> mapping_args,Action &ac)
+    {
+        #pragma omp parallel for
+        for(Condition effect  : ac.get_effects())
+        {
+            string pred = effect.get_predicate();
+            list<string> arg_val = effect.get_args();
+            list<string> arg_check;
+            while(arg_val.size()!=0)
+            {
+                auto temp = arg_val.front();
+                if(mapping_args.find(temp) != mapping_args.end())
+                {
+                    arg_check.push_back(mapping_args.find(temp)->second);
+                }else
+                {
+                   arg_check.push_back(temp); 
+                }               
+                arg_val.pop_front();
+            }
+            // cout<<"checking for condition ";
+            Condition cond(pred,arg_check,effect.get_truth());
+            // cout<< cond<<"\n";
+            this->gEffects.insert(cond);   
+        }
+
+    }
+    unordered_set<Condition, ConditionHasher, ConditionComparator> get_effects() const
+    {
+        return this->gEffects;
+    }
+
+/*
     void update_gc(string name, list<string> arg_values)
     {
         this->name = name;
@@ -351,7 +415,7 @@ public:
             this->arg_values.push_back(ar);
         }
 
-    }
+    }*/
     string get_name() const
     {
         return this->name;
@@ -405,7 +469,6 @@ class State
 {
 public:
     unordered_set_of_GC state_conditions; // current state conditions
-    int state_id;
     int g = INT8_MAX;
     int h;
     int f;
@@ -420,10 +483,7 @@ public:
        // this->state_id = state_id;
         return;
     } 
-    int get_stateid()
-    {
-        return this->state_id;
-    }
+
     unordered_set_of_GC get_state_conditions()
     {
         return this->state_conditions;
@@ -452,7 +512,7 @@ public:
         }
 
     }
-    GroundedAction get_prev_action()
+    inline GroundedAction get_prev_action()
     {
         return prev_action[0];
     }
@@ -570,23 +630,13 @@ public:
         if(index==n)
         {
             combo_subet.push_back(data);
-            // cout<<"combinations ";
-            // for(auto k : data)
-            // {
-            //     cout<< k <<" ";
-            // }
-            // cout<<endl;
             return;
         }
         if(i>=sym.size()) return;
-
-        //cout<<" index"<<index<< " i "<<i <<"\n";
         data[index] = sym[i];
         // current data update
         combinations(n,combo_subet,i+1,index+1,data,sym);
         // going for next data
-        // cout<<"going for next \n";
-        // cout<<" index "<<index<< " i "<<i <<"\n";
         combinations(n,combo_subet,i+1,index,data,sym);
     }
 
@@ -597,11 +647,6 @@ public:
         if( i == n) 
         {
             combo.push_back(one_combo);
-            // for(auto k : one_combo)
-            // {
-            //     cout<< k<<" ";
-            // }
-            // cout<<endl;
         }
         else{
             for(j=i;j< n;j++)
@@ -609,7 +654,6 @@ public:
                 swap(one_combo[i],one_combo[j]);
                 all_combinations(one_combo,i+1,n,combo);
                 // cout<<"going for next \n";
-                // cout<<" i "<< i << " j "<< j;
                 swap(one_combo[i],one_combo[j]);
             }
         }
@@ -618,27 +662,18 @@ public:
 
     bool valid_actions(State &state,unordered_map<string,string> mapping_args,Action &ac)
     {
-        
-        auto conditions =  state.get_state_conditions(); // grounded condition
-        // if(ac.get_name() == "Fill_Water_at")
-        // {
-        //     cout<<"checking for valid action"<< ac.get_name();
-        //     cout<<"state conditions ";
-        //     state.print();
-        // }
+        auto conditions =  state.state_conditions; // grounded condition
+        #pragma omp parallel for
         for(Condition precon  : ac.get_preconditions())
         {
             string pred = precon.get_predicate();
             list<string> arg_val = precon.get_args();
             list<string> arg_check;
-            //cout<<" condition name"<< pred ;
             while(arg_val.size()!=0)
             {
                 auto temp = arg_val.front();
                 if(mapping_args.find(temp) != mapping_args.end())
                 {
-                    // if(ac.get_name() == "Fill_Water_at")
-                    //     cout<<" "<< temp<<" mapping "<< mapping_args.find(temp)->second <<"\n";
                     arg_check.push_back(mapping_args.find(temp)->second);
                 }else
                 {
@@ -649,18 +684,25 @@ public:
             //cout<<"checking for condition ";
             GroundedCondition precondition(pred,arg_check,true);
             //cout<< precondition<<"\n";
-            // if(ac.get_name() == "Fill_Water_at")
-            // {
-            //     cout<<"checking for condition ";
-            //     cout<< precondition<<"\n";
-            // }
-            if(conditions.find(precondition) == conditions.end())
+           if(conditions.find(precondition) == conditions.end())
+                return false;   
+        }
+        return true;
+    }
+    bool valid_action(State &state,GroundedAction &ac)
+    {
+        auto conditions =  state.state_conditions; // grounded condition
+        #pragma omp parallel for
+        for(GroundedCondition precon  : ac.get_preconditions())
+        {
+           if(conditions.find(precon) == conditions.end())
                 return false;   
         }
         return true;
     }
     vector<GroundedAction>  valid_set_actions(State &state,Action &ac)
     {
+        
         vector<GroundedAction> action_vec; 
         int n = ac.get_args().size();// number of symbols involved
         //cout<<" n val "<<n<<endl;
@@ -672,15 +714,15 @@ public:
         for(auto s: symbols)
         {
             sym.push_back(s);
-            //cout<<" "<<s<<" "<<sym.size();
         }
         combinations(n,combo_subet,0,0,data,sym);// all combinations updated for current args
+        #pragma omp parallel for
         for (auto one_combo : combo_subet)
         {
             all_combinations(one_combo,0,one_combo.size(),combo);
         }
-        //cout<<" all combinations size "<<combo.size()<<endl;
         unordered_map<string,string> mapping_args;
+        #pragma omp parallel for
         for (int i=0; i<combo.size();i++)
         {
             list<string> args_ac = ac.get_args();
@@ -690,37 +732,19 @@ public:
             for(auto it = args_ac.begin(); it != args_ac.end(); ++it)
             {
                 mapping_args[*it] = combo[i][j];
-                // cout<<" map before valid sets"<< *it << " "<<combo[i][j] << endl;
                 j++;
-            }
-            list<string> arg_check;
-            for(auto d : combo[i] )
-            {
-                arg_check.push_back(d); // creating list of args to check with action preconditions
             }
             // if valid action then store the action and args // so use grounded action 
             if(valid_actions(state,mapping_args,ac))
             {
-                // cout<<"valid transition for the args with action name "<<ac.get_name()<<"( ";
-                // for(auto arg : arg_check)
-                // {
-                //     cout<< arg <<",";
-                // }
-                // cout<<" )"<<endl;
+                list<string> arg_check;
+                for(auto d : combo[i] )
+                {
+                    arg_check.push_back(d); // creating list of args to check with action preconditions
+                }
                 GroundedAction gaction(ac.get_name(),arg_check);
+                gaction.update_effects(mapping_args,ac);
                 action_vec.push_back(gaction);
-            }
-            else{
-                // cout<<"not vaid\n";
-                // if(ac.get_name() == "Fill_Water_at")
-                // {
-                //     cout<<"not valid action"<<ac.get_name()<<"( ";
-                //     for(auto arg : arg_check)
-                //     {
-                //         cout<< arg <<",";
-                //     }
-                //     cout<<" )"<<endl;
-                // } 
             }
         }
               
@@ -729,87 +753,104 @@ public:
     }
     State next_state(State &state, GroundedAction &action)
     {
-        string action_name = action.get_name();
-        list<string> args = action.get_arg_values();
-        // we already know that this action is valid for the state, so not rechecking again
-        // just finding the next state by imposing the effects and making new state out of it
-        vector<string> args_vec;
-        for(auto arg : args) args_vec.push_back(arg);
-        Action env_action = this->get_action(action_name);
-        list<string> env_action_args = env_action.get_args();
-        int i = 0;
-        unordered_map<string, string> mapping_args;
-        for(auto it = env_action_args.begin(); it != env_action_args.end(); ++it)
-        {
-            mapping_args[*it] = args_vec[i];
-            //cout<<" map in next-state "<< *it << " "<<args_vec[i] << endl;
-            i++;
-        }
-        // if(action_name == "MoveToTable")// for move to table Table need to be there in args
-        // {
-        //mapping_args["Table"] = "Table";       
-        // }
-        unordered_set_of_GC conditions = state.get_state_conditions();
-        unordered_set<Condition, ConditionHasher, ConditionComparator> env_effects = env_action.get_effects();
+        unordered_set_of_GC conditions = state.state_conditions;
+        unordered_set<Condition, ConditionHasher, ConditionComparator> env_effects = action.get_effects();
+        #pragma omp parallel for
         for(Condition cond : env_effects)
         {
-            //cout<<"next cond "<<cond<<"\n";
             auto predicate_env = cond.get_predicate();
             list<string> cond_args = cond.get_args();
-            list<string> mapped_args;
-            
-            while(cond_args.size()!=0)
-            {
-                if(mapping_args.find(cond_args.front()) != mapping_args.end())
-                    mapped_args.push_back(mapping_args.find(cond_args.front())->second);
-                else
-                    mapped_args.push_back(cond_args.front());
-                
-                //cout<<" args "<< mapping_args.find(cond_args.front())->second<<" ";
-                cond_args.pop_front();
-            } 
             if (cond.get_truth() == false)
             {
-                //cout<<" clearing conditions \n";
-                conditions.erase(GroundedCondition(predicate_env,mapped_args));
-                //cout<<"done \n";
+                conditions.erase(GroundedCondition(predicate_env,cond_args));
             }
             else
             {
-                //cout<<"adding conditions \n";
-                // if(predicate_env == "Clear" && mapped_args.size() == 1 && mapped_args.front()=="Table")
-                // {
-
-                // }else{
-                conditions.insert(GroundedCondition(predicate_env, mapped_args));
-                // }
+                conditions.insert(GroundedCondition(predicate_env, cond_args));
             }
         }
-        // cout<<" for action "<<action<<"\n";
-        // cout<<" next state conditions ";
-        // for(auto g : conditions)
-        // {
-        //     cout<<g<<" ";
-        // } 
-        // cout<<"\n";
-        //state_count++;
         State succ(conditions);
         succ.update_prev_action(action);
         return succ;    
     }
+    vector<GroundedAction> get_all_actions()
+    {
+        vector<GroundedAction> action_vec; 
+        for( auto ac : this->actions)
+        {
+            int n = ac.get_args().size();// number of symbols involved
+            vector<vector<string>> combo_subet;
+            vector<vector<string>> combo;
+            vector<string> data(n);
+            vector<string> sym;
+            sym.reserve(this->symbols.size());
+            for(auto s: symbols)
+            {
+                sym.push_back(s);
+            }
+            combinations(n,combo_subet,0,0,data,sym);// all combinations updated for current args
+            #pragma omp parallel for
+            for (auto one_combo : combo_subet)
+            {
+                all_combinations(one_combo,0,one_combo.size(),combo);
+            }
+            unordered_map<string,string> mapping_args;
+            #pragma omp parallel for
+            for (int i=0; i<combo.size();i++)
+            {
+                list<string> args_ac = ac.get_args();
+                mapping_args.clear();
+                // we already made sure that the args arg_check nd args_ac are same size
+                int j=0;
+                for(auto it = args_ac.begin(); it != args_ac.end(); ++it)
+                {
+                    mapping_args[*it] = combo[i][j];
+                    j++;
+                }
+                list<string> arg_check;
+                for(auto d : combo[i] )
+                {
+                    arg_check.push_back(d); // creating list of args to check with action preconditions
+                }
+                GroundedAction gaction(ac.get_name(),arg_check);
+                gaction.update_preconditions(mapping_args,ac);
+                gaction.update_effects(mapping_args,ac);
+                // if valid action then store the action and args // so use grounded action 
+                action_vec.push_back(gaction);
+            }
+
+        }
+        return action_vec;
+    }
+
+    vector<State> get_successors(State &state, vector<GroundedAction> all_actions)
+    {
+        vector<State> Succ;
+        #pragma omp parallel for
+        for( GroundedAction ac : all_actions)
+        {
+            if(valid_action(state,ac))
+            {
+                Succ.push_back(next_state(state,ac));
+            }
+            // if(ac.get_name() == "Extinguish_first_time")
+            //     cout<<" for action name "<<ac.get_name()<<" no of incre succ states "<<Succ.size()<<endl;
+        }
+        return Succ;
+    }
     vector<State> get_successors(State &state)
     {
         vector<State> Succ;
-        for( Action ac : this->actions)
+        #pragma omp parallel for
+        for(Action ac : this->actions)
         {
-            vector<GroundedAction>  gactions  = valid_set_actions(state,ac);
-            // cout<<" got the g actions now getting succ \n";
-            for( GroundedAction each_action : gactions)
-            {   
+            auto valid_actions = valid_set_actions(state,ac);
+            for(auto each_action : valid_actions)
+            {
                 Succ.push_back(next_state(state,each_action));
             }
-            if(ac.get_name() == "Extinguish_first_time")
-                cout<<" for action name "<<ac.get_name()<<" no of incre succ states "<<Succ.size()<<endl;
+            // if(ac.get_name() == "Extinguish_first_time")
+            //     cout<<" for action name "<<ac.get_name()<<" no of incre succ states "<<Succ.size()<<endl;
         }
         return Succ;
     }
@@ -1137,5 +1178,6 @@ int Env::heuristics(unordered_set_of_GC state_conditions)
         if(state_conditions.find(cond)== state_conditions.end())
             h++;
     }
+
     return h;
 }
